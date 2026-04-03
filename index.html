@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TaxoAI — Product Classifier</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #18181c;
+    --surface2: #202026;
+    --border: #2a2a32;
+    --border2: #38383f;
+    --accent: #6c63ff;
+    --accent2: #a89cff;
+    --text: #f0eeff;
+    --muted: #7b7a8e;
+    --success: #3ecf8e;
+    --warn: #f0a500;
+    --danger: #f05252;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--accent2);
+    letter-spacing: -0.02em;
+  }
+  .logo span { color: var(--muted); }
+  .api-area { display: flex; align-items: center; gap: 8px; }
+  .api-area input {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 10px;
+    width: 240px;
+    outline: none;
+  }
+  .api-area input:focus { border-color: var(--accent); }
+  .api-save {
+    font-size: 12px;
+    font-family: var(--mono);
+    padding: 6px 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .api-save:hover { background: var(--accent2); color: var(--bg); }
+  .api-status { font-size: 11px; font-family: var(--mono); }
+  .api-status.ok { color: var(--success); }
+  .api-status.no { color: var(--muted); }
+
+  /* Layout */
+  .main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+  .tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    font-family: var(--mono);
+    letter-spacing: 0.02em;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Single item */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .field input, .field textarea, .field select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface2); }
+  .field textarea { min-height: 80px; resize: vertical; }
+
+  .classify-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    letter-spacing: 0.01em;
+  }
+  .classify-btn:hover { background: #7d75ff; }
+  .classify-btn:active { transform: scale(0.99); }
+  .classify-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  /* Results */
+  .result-box {
+    margin-top: 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .result-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+  }
+  .result-category {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent2);
+  }
+  .conf-badge {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 3px 8px;
+    border-radius: 99px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .conf-high { background: rgba(62,207,142,0.15); color: var(--success); }
+  .conf-medium { background: rgba(240,165,0,0.15); color: var(--warn); }
+  .conf-low { background: rgba(240,82,82,0.15); color: var(--danger); }
+  .result-reasoning {
+    padding: 10px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .attr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+  .attr-cell {
+    background: var(--surface);
+    padding: 12px 14px;
+  }
+  .attr-cell:hover { background: var(--surface2); }
+  .attr-key {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .attr-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .attr-value.null-val { color: var(--border2); font-style: italic; font-weight: 400; font-size: 12px; }
+
+  /* Bulk */
+  .drop-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 12px;
+    padding: 3rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 1.5rem;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(108,99,255,0.05);
+  }
+  .drop-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
+  .drop-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .drop-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .bulk-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .bulk-btn {
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: all 0.15s;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .bulk-btn:hover { border-color: var(--accent); color: var(--accent2); }
+  .bulk-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bulk-btn.primary:hover { background: #7d75ff; }
+  .bulk-btn.success { background: rgba(62,207,142,0.15); border-color: var(--success); color: var(--success); }
+  .bulk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 99px;
+    transition: width 0.3s;
+  }
+  .progress-label {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: var(--surface2); }
+  th {
+    padding: 10px 12px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .status-cell { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .dot-done { background: var(--success); }
+  .dot-pending { background: var(--border2); }
+  .dot-error { background: var(--danger); }
+  .dot-running { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Template download */
+  .template-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .template-info { flex: 1; }
+  .template-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .template-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* Taxonomy viewer */
+  .taxonomy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .tax-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .tax-card-header {
+    background: var(--surface2);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .tax-card-body { padding: 12px 14px; }
+  .tax-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .tax-row:last-child { border-bottom: none; }
+  .tax-key { color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
+  .tax-vals { color: var(--text); text-align: right; line-height: 1.5; }
+  .pill {
+    display: inline-block;
+    background: rgba(108,99,255,0.15);
+    color: var(--accent2);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-family: var(--mono);
+    margin: 1px;
+  }
+
+  .error-msg { color: var(--danger); font-size: 12px; font-family: var(--mono); margin-top: 10px; padding: 10px 14px; background: rgba(240,82,82,0.08); border-radius: 8px; border: 1px solid rgba(240,82,82,0.2); }
+
+  input[type="file"] { display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Taxo<span>AI</span></div>
+  <div class="api-area">
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." />
+    <button class="api-save" onclick="saveKey()">Save key</button>
+    <span class="api-status no" id="apiStatus">no key</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('single')">Single item</div>
+    <div class="tab" onclick="switchTab('bulk')">Bulk import</div>
+    <div class="tab" onclick="switchTab('taxonomy')">Taxonomy</div>
+  </div>
+
+  <!-- SINGLE ITEM -->
+  <div class="tab-panel active" id="tab-single">
+    <div class="form-grid">
+      <div class="field">
+        <label>Part number</label>
+        <input type="text" id="s-partnum" placeholder="e.g. DRL-HSS-3/8-JL" />
+      </div>
+      <div class="field">
+        <label>Category (optional — AI will detect)</label>
+        <select id="s-category">
+          <option value="">Auto-detect</option>
+          <option>Drill Bits</option>
+          <option>Taps</option>
+          <option>Dies</option>
+          <option>Carbide Burrs</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Product name / description</label>
+      <textarea id="s-desc" placeholder="e.g. 3/8&quot; High Speed Steel Jobber Length Drill Bit, 118° Point, Black Oxide Finish"></textarea>
+    </div>
+    <button class="classify-btn" id="singleBtn" onclick="classifySingle()">Classify product</button>
+    <div id="single-error"></div>
+    <div id="single-result"></div>
+  </div>
+
+  <!-- BULK -->
+  <div class="tab-panel" id="tab-bulk">
+    <div class="template-section">
+      <div class="template-info">
+        <div class="template-title">Download import template</div>
+        <div class="template-sub">CSV with columns: part_number, product_name, category (optional)</div>
+      </div>
+      <button class="bulk-btn" onclick="downloadTemplate()">Download template</button>
+    </div>
+
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="handleDrop(event)">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-title">Drop your CSV or Excel file here</div>
+      <div class="drop-sub">or click to browse — .csv / .xlsx / .xls</div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFile(this.files[0])" />
+
+    <div id="bulk-controls" style="display:none;">
+      <div class="progress-label">
+        <span id="prog-label">Ready</span>
+        <span id="prog-count"></span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+      <div class="bulk-controls">
+        <button class="bulk-btn primary" id="runBulkBtn" onclick="runBulk()">Run classification</button>
+        <button class="bulk-btn success" id="exportBtn" onclick="exportResults()" style="display:none">Export results</button>
+        <button class="bulk-btn" onclick="resetBulk()">Clear</button>
+        <span id="bulk-summary" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-left:auto;"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="bulkTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Part number</th>
+              <th>Product name</th>
+              <th>Status</th>
+              <th>Category</th>
+              <th>Size</th>
+              <th>Type</th>
+              <th>Material</th>
+              <th>Point-Angle</th>
+              <th>Finish</th>
+              <th>Flutes</th>
+              <th>Grind Limits</th>
+              <th>Cut Type</th>
+              <th>Shape</th>
+              <th>TPI</th>
+              <th>Chamfer</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="bulkBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAXONOMY -->
+  <div class="tab-panel" id="tab-taxonomy">
+    <div class="taxonomy-grid" id="taxonomyGrid"></div>
+  </div>
+
+</div>
+
+<script>
+const TAXONOMY = {
+  "Drill Bits": {
+    size_attr: "Diameter",
+    types: ["Jobber Length","Mechanics Length","Screw Machine","Aircraft Extension","Taper Length","Reduced Shank","Taper Shank","Reamers","Step Drill","Countersink"],
+    extra_attrs: ["Material","Point-Angle","Finish","Flutes","Grind Limits","Cut Type"]
+  },
+  "Taps": {
+    size_attr: "Thread Size",
+    types: ["Hand Taps","Spiral Point","Spiral Flute","Pipe Taps"],
+    extra_attrs: ["Material","TPI","Chamfer","Cut Type"]
+  },
+  "Dies": {
+    size_attr: "Thread Size",
+    types: ["Round","Hex","Adjustable"],
+    extra_attrs: ["Material","TPI","Cut Type"]
+  },
+  "Carbide Burrs": {
+    size_attr: "Shank Size",
+    types: [],
+    extra_attrs: ["Shape","Cut Type","Flutes","Finish"]
+  }
+};
+
+const ALL_ATTRS = ["Size","Type","Material","Point-Angle","Finish","Flutes","Grind Limits","Cut Type","Shape","TPI","Chamfer"];
+
+let apiKey = localStorage.getItem('taxoai_key') || '';
+let bulkRows = [];
+let bulkResults = [];
+let running = false;
+
+// Init
+window.onload = () => {
+  if (apiKey) {
+    document.getElementById('apiKeyInput').value = apiKey;
+    document.getElementById('apiStatus').textContent = 'key saved';
+    document.getElementById('apiStatus').className = 'api-status ok';
+  }
+  renderTaxonomy();
+};
+
+function saveKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (!k) return;
+  apiKey = k;
+  localStorage.setItem('taxoai_key', k);
+  document.getElementById('apiStatus').textContent = 'key saved';
+  document.getElementById('apiStatus').className = 'api-status ok';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const tabs = ['single','bulk','taxonomy'];
+  const idx = tabs.indexOf(name);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+function buildSystemPrompt() {
+  return `You are a product taxonomy classification engine for an industrial e-commerce catalog. Extract structured filter attributes from product part numbers and names/descriptions.
+
+Taxonomy:
+${JSON.stringify(TAXONOMY, null, 2)}
+
+Rules:
+- Detect the category from the input. If not obvious, return your best guess.
+- Extract ONLY attributes clearly determinable from the input. Return null for unknown.
+- Size: extract the measurement with unit exactly (e.g. "3/8\"", "1/4 inch", "M10").
+- Type: match to the closest taxonomy type value for the detected category.
+- Return confidence: "high" (most attrs clear), "medium" (some inferred), "low" (vague input).
+- reasoning: 1 sentence explaining your parsing.
+
+Return ONLY valid JSON, no markdown, no preamble:
+{
+  "category": "...",
+  "confidence": "high|medium|low",
+  "reasoning": "...",
+  "attributes": {
+    "Size": null,
+    "Type": null,
+    "Material": null,
+    "Point-Angle": null,
+    "Finish": null,
+    "Flutes": null,
+    "Grind Limits": null,
+    "Cut Type": null,
+    "Shape": null,
+    "TPI": null,
+    "Chamfer": null
+  }
+}`;
+}
+
+async function callAPI(partnum, desc) {
+  if (!apiKey) throw new Error('No API key — enter your Anthropic key in the header and click Save.');
+  const msg = `Part Number: ${partnum || 'not provided'}\nProduct Name/Description: ${desc}`;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 800,
+      system: buildSystemPrompt(),
+      messages: [{ role: 'user', content: msg }]
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  const raw = data.content.map(b => b.text || '').join('');
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+// Single
+async function classifySingle() {
+  const partnum = document.getElementById('s-partnum').value.trim();
+  const desc = document.getElementById('s-desc').value.trim();
+  const cat = document.getElementById('s-category').value;
+  const errDiv = document.getElementById('single-error');
+  errDiv.innerHTML = '';
+  if (!desc) { errDiv.innerHTML = '<div class="error-msg">Enter a product name or description.</div>'; return; }
+
+  const btn = document.getElementById('singleBtn');
+  btn.disabled = true;
+  btn.textContent = 'Classifying...';
+  document.getElementById('single-result').innerHTML = '';
+
+  try {
+    const input = cat ? `Category hint: ${cat}\nPart Number: ${partnum || 'n/a'}\nProduct Name: ${desc}` : null;
+    const result = await callAPI(partnum, cat ? `[Category: ${cat}] ${desc}` : desc);
+    renderSingleResult(result);
+  } catch(e) {
+    errDiv.innerHTML = `<div class="error-msg">${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Classify product';
+}
+
+function renderSingleResult(r) {
+  const conf = r.confidence || 'medium';
+  const attrs = r.attributes || {};
+  const filled = ALL_ATTRS.filter(k => attrs[k]).length;
+  const cards = ALL_ATTRS.map(k => {
+    const v = attrs[k];
+    return `<div class="attr-cell">
+      <div class="attr-key">${k}</div>
+      <div class="attr-value ${v ? '' : 'null-val'}">${v || '—'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('single-result').innerHTML = `
+    <div class="result-box" style="margin-top:1.5rem;">
+      <div class="result-header">
+        <span class="result-category">${r.category || 'Unknown'}</span>
+        <span class="conf-badge conf-${conf}">${conf}</span>
+        <span style="margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--muted);">${filled}/${ALL_ATTRS.length} attrs</span>
+      </div>
+      <div class="result-reasoning">${r.reasoning || ''}</div>
+      <div class="attr-grid">${cards}</div>
+    </div>`;
+}
+
+// Bulk
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFile(file) {
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let rows = [];
+    if (file.name.endsWith('.csv')) {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,'').toLowerCase());
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(',').map(v => v.trim().replace(/"/g,''));
+        const row = {};
+        headers.forEach((h,idx) => row[h] = vals[idx] || '');
+        if (row.product_name || row.name || row.description) rows.push(row);
+      }
+    } else {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      rows = data.map(r => {
+        const norm = {};
+        Object.keys(r).forEach(k => norm[k.toLowerCase().replace(/\s+/g,'_')] = r[k]);
+        return norm;
+      });
+    }
+    bulkRows = rows.filter(r => r.product_name || r.name || r.description || r.product_description);
+    bulkResults = bulkRows.map(() => ({ status: 'pending', result: null }));
+    renderBulkTable();
+    document.getElementById('bulk-controls').style.display = 'block';
+    document.getElementById('bulk-summary').textContent = `${bulkRows.length} rows loaded`;
+  };
+  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function getName(row) {
+  return row.product_name || row.name || row.description || row.product_description || '';
+}
+function getPartNum(row) {
+  return row.part_number || row.sku || row.item_number || row.partnum || '';
+}
+
+function renderBulkTable() {
+  const tbody = document.getElementById('bulkBody');
+  tbody.innerHTML = bulkRows.map((row, i) => {
+    const r = bulkResults[i];
+    const st = r.status;
+    const dotClass = { pending:'dot-pending', running:'dot-running', done:'dot-done', error:'dot-error' }[st] || 'dot-pending';
+    const res = r.result;
+    const a = res?.attributes || {};
+    return `<tr id="brow-${i}">
+      <td style="color:var(--muted)">${i+1}</td>
+      <td title="${getPartNum(row)}">${getPartNum(row) || '—'}</td>
+      <td title="${getName(row)}">${getName(row).substring(0,40)}${getName(row).length>40?'...':''}</td>
+      <td><div class="status-cell"><div class="dot ${dotClass}"></div><span style="color:var(--muted)">${st}</span></div></td>
+      <td>${res?.category || ''}</td>
+      <td>${a.Size || ''}</td>
+      <td>${a.Type || ''}</td>
+      <td>${a.Material || ''}</td>
+      <td>${a['Point-Angle'] || ''}</td>
+      <td>${a.Finish || ''}</td>
+      <td>${a.Flutes || ''}</td>
+      <td>${a['Grind Limits'] || ''}</td>
+      <td>${a['Cut Type'] || ''}</td>
+      <td>${a.Shape || ''}</td>
+      <td>${a.TPI || ''}</td>
+      <td>${a.Chamfer || ''}</td>
+      <td>${res?.confidence || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateRow(i) {
+  const row = bulkRows[i];
+  const r = bulkResults[i];
+  const st = r.status;
+  const dotClass = { pending:'dot-pending', running:'dot-running', done:'dot-done', error:'dot-error' }[st];
+  const res = r.result;
+  const a = res?.attributes || {};
+  const tr = document.getElementById('brow-' + i);
+  if (!tr) return;
+  tr.innerHTML = `
+    <td style="color:var(--muted)">${i+1}</td>
+    <td title="${getPartNum(row)}">${getPartNum(row) || '—'}</td>
+    <td title="${getName(row)}">${getName(row).substring(0,40)}${getName(row).length>40?'...':''}</td>
+    <td><div class="status-cell"><div class="dot ${dotClass}"></div><span style="color:var(--muted)">${st}</span></div></td>
+    <td>${res?.category || ''}</td>
+    <td>${a.Size || ''}</td>
+    <td>${a.Type || ''}</td>
+    <td>${a.Material || ''}</td>
+    <td>${a['Point-Angle'] || ''}</td>
+    <td>${a.Finish || ''}</td>
+    <td>${a.Flutes || ''}</td>
+    <td>${a['Grind Limits'] || ''}</td>
+    <td>${a['Cut Type'] || ''}</td>
+    <td>${a.Shape || ''}</td>
+    <td>${a.TPI || ''}</td>
+    <td>${a.Chamfer || ''}</td>
+    <td>${res?.confidence || ''}</td>`;
+}
+
+async function runBulk() {
+  if (running) return;
+  if (!apiKey) {
+    alert('Enter your Anthropic API key in the header first.');
+    return;
+  }
+  running = true;
+  document.getElementById('runBulkBtn').disabled = true;
+  document.getElementById('exportBtn').style.display = 'none';
+
+  const total = bulkRows.length;
+  let done = 0;
+  let errors = 0;
+
+  for (let i = 0; i < total; i++) {
+    if (bulkResults[i].status === 'done') { done++; continue; }
+    bulkResults[i].status = 'running';
+    updateRow(i);
+    document.getElementById('prog-label').textContent = `Processing ${i+1} of ${total}...`;
+    document.getElementById('prog-count').textContent = `${done} done · ${errors} errors`;
+    document.getElementById('progFill').style.width = ((i / total) * 100).toFixed(1) + '%';
+
+    try {
+      const res = await callAPI(getPartNum(bulkRows[i]), getName(bulkRows[i]));
+      bulkResults[i] = { status: 'done', result: res };
+      done++;
+    } catch(e) {
+      bulkResults[i] = { status: 'error', result: null, error: e.message };
+      errors++;
+    }
+    updateRow(i);
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  document.getElementById('progFill').style.width = '100%';
+  document.getElementById('prog-label').textContent = 'Complete';
+  document.getElementById('prog-count').textContent = `${done} done · ${errors} errors`;
+  document.getElementById('bulk-summary').textContent = `${done}/${total} classified · ${errors} errors`;
+  document.getElementById('exportBtn').style.display = '';
+  document.getElementById('runBulkBtn').disabled = false;
+  running = false;
+}
+
+function exportResults() {
+  const headers = ['part_number','product_name','category','confidence','Size','Type','Material','Point-Angle','Finish','Flutes','Grind Limits','Cut Type','Shape','TPI','Chamfer','reasoning'];
+  const data = bulkRows.map((row, i) => {
+    const r = bulkResults[i];
+    const res = r.result;
+    const a = res?.attributes || {};
+    return [
+      getPartNum(row), getName(row),
+      res?.category || '', res?.confidence || '',
+      a.Size||'', a.Type||'', a.Material||'', a['Point-Angle']||'',
+      a.Finish||'', a.Flutes||'', a['Grind Limits']||'', a['Cut Type']||'',
+      a.Shape||'', a.TPI||'', a.Chamfer||'',
+      res?.reasoning||''
+    ];
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+  ws['!cols'] = headers.map(() => ({ wch: 18 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Classified Products');
+  XLSX.writeFile(wb, 'taxoai_results.xlsx');
+}
+
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['part_number','product_name','category'],
+    ['DRL-HSS-3/8-JL','3/8" High Speed Steel Jobber Length Drill Bit 118 Degree','Drill Bits'],
+    ['TAP-M6-SPT','M6 x 1.0 Spiral Point Tap High Speed Steel','Taps'],
+    ['','','']
+  ]);
+  ws['!cols'] = [{ wch: 20 }, { wch: 50 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Import Template');
+  XLSX.writeFile(wb, 'taxoai_import_template.xlsx');
+}
+
+function resetBulk() {
+  bulkRows = [];
+  bulkResults = [];
+  document.getElementById('bulk-controls').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('bulkBody').innerHTML = '';
+  document.getElementById('progFill').style.width = '0%';
+  document.getElementById('prog-label').textContent = 'Ready';
+  document.getElementById('prog-count').textContent = '';
+  document.getElementById('exportBtn').style.display = 'none';
+  running = false;
+}
+
+// Taxonomy viewer
+function renderTaxonomy() {
+  const grid = document.getElementById('taxonomyGrid');
+  grid.innerHTML = Object.entries(TAXONOMY).map(([cat, data]) => {
+    const typesPills = data.types.map(t => `<span class="pill">${t}</span>`).join('');
+    const attrRows = data.extra_attrs.map(a => `<div class="tax-row"><span class="tax-key">${a}</span><span class="tax-vals" style="color:var(--muted);font-size:10px;font-family:var(--mono);">extracted by AI</span></div>`).join('');
+    return `<div class="tax-card">
+      <div class="tax-card-header">${cat}<span style="color:var(--muted);font-size:10px;">${data.size_attr}</span></div>
+      <div class="tax-card-body">
+        <div class="tax-row" style="padding-bottom:8px;">
+          <span class="tax-key" style="margin-bottom:4px;">Types</span>
+          <div>${typesPills || '<span style="color:var(--muted);font-size:10px;font-family:var(--mono);">shape-based</span>'}</div>
+        </div>
+        ${attrRows}
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
