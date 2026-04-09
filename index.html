@@ -1,382 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>TaxoAI — Product Classifier</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
-
-  :root {
-    --bg: #0f0f11;
-    --surface: #18181c;
-    --surface2: #202026;
-    --border: #2a2a32;
-    --border2: #38383f;
-    --accent: #6c63ff;
-    --accent2: #a89cff;
-    --text: #f0eeff;
-    --muted: #7b7a8e;
-    --success: #3ecf8e;
-    --warn: #f0a500;
-    --danger: #f05252;
-    --mono: 'DM Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: var(--sans);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
-  /* Header */
-  .header {
-    border-bottom: 1px solid var(--border);
-    padding: 0 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 56px;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 100;
-  }
-  .logo {
-    font-family: var(--mono);
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--accent2);
-    letter-spacing: -0.02em;
-  }
-  .logo span { color: var(--muted); }
-  .api-area { display: flex; align-items: center; gap: 8px; }
-  .api-area input {
-    font-family: var(--mono);
-    font-size: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 6px 10px;
-    width: 240px;
-    outline: none;
-  }
-  .api-area input:focus { border-color: var(--accent); }
-  .api-save {
-    font-size: 12px;
-    font-family: var(--mono);
-    padding: 6px 12px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-  }
-  .api-save:hover { background: var(--accent2); color: var(--bg); }
-  .api-status { font-size: 11px; font-family: var(--mono); }
-  .api-status.ok { color: var(--success); }
-  .api-status.no { color: var(--muted); }
-
-  /* Layout */
-  .main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
-
-  /* Tabs */
-  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
-  .tab {
-    padding: 10px 20px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    color: var(--muted);
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
-    font-family: var(--mono);
-    letter-spacing: 0.02em;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
-
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-
-  /* Single item */
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-  .field label {
-    display: block;
-    font-size: 11px;
-    font-family: var(--mono);
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
-  }
-  .field input, .field textarea, .field select {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 14px;
-    padding: 10px 12px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
-  .field select option { background: var(--surface2); }
-  .field textarea { min-height: 80px; resize: vertical; }
-
-  .classify-btn {
-    width: 100%;
-    padding: 12px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    font-family: var(--sans);
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-    letter-spacing: 0.01em;
-  }
-  .classify-btn:hover { background: #7d75ff; }
-  .classify-btn:active { transform: scale(0.99); }
-  .classify-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
-
-  /* Results */
-  .result-box {
-    margin-top: 1.5rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .result-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--surface2);
-  }
-  .result-category {
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--accent2);
-  }
-  .conf-badge {
-    font-size: 10px;
-    font-family: var(--mono);
-    padding: 3px 8px;
-    border-radius: 99px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  .conf-high { background: rgba(62,207,142,0.15); color: var(--success); }
-  .conf-medium { background: rgba(240,165,0,0.15); color: var(--warn); }
-  .conf-low { background: rgba(240,82,82,0.15); color: var(--danger); }
-  .result-reasoning {
-    padding: 10px 16px;
-    font-size: 12px;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    font-style: italic;
-    line-height: 1.5;
-  }
-  .attr-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 1px;
-    background: var(--border);
-  }
-  .attr-cell {
-    background: var(--surface);
-    padding: 12px 14px;
-  }
-  .attr-cell:hover { background: var(--surface2); }
-  .attr-key {
-    font-size: 10px;
-    font-family: var(--mono);
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 4px;
-  }
-  .attr-value {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-  }
-  .attr-value.null-val { color: var(--border2); font-style: italic; font-weight: 400; font-size: 12px; }
-
-  /* Bulk */
-  .drop-zone {
-    border: 2px dashed var(--border2);
-    border-radius: 12px;
-    padding: 3rem;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    margin-bottom: 1.5rem;
-  }
-  .drop-zone:hover, .drop-zone.drag-over {
-    border-color: var(--accent);
-    background: rgba(108,99,255,0.05);
-  }
-  .drop-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
-  .drop-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
-  .drop-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
-
-  .bulk-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-  }
-  .bulk-btn {
-    padding: 9px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    font-family: var(--sans);
-    transition: all 0.15s;
-    border: 1px solid var(--border2);
-    background: var(--surface);
-    color: var(--text);
-  }
-  .bulk-btn:hover { border-color: var(--accent); color: var(--accent2); }
-  .bulk-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .bulk-btn.primary:hover { background: #7d75ff; }
-  .bulk-btn.success { background: rgba(62,207,142,0.15); border-color: var(--success); color: var(--success); }
-  .bulk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .progress-bar {
-    height: 3px;
-    background: var(--border);
-    border-radius: 99px;
-    overflow: hidden;
-    margin-bottom: 1rem;
-  }
-  .progress-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 99px;
-    transition: width 0.3s;
-  }
-  .progress-label {
-    font-size: 11px;
-    font-family: var(--mono);
-    color: var(--muted);
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-  }
-
-  /* Table */
-  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  thead tr { background: var(--surface2); }
-  th {
-    padding: 10px 12px;
-    text-align: left;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  td {
-    padding: 9px 12px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    white-space: nowrap;
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: var(--surface2); }
-  .status-cell { display: flex; align-items: center; gap: 6px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .dot-done { background: var(--success); }
-  .dot-pending { background: var(--border2); }
-  .dot-error { background: var(--danger); }
-  .dot-running { background: var(--accent); animation: pulse 1s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  /* Template download */
-  .template-section {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1.25rem;
-    margin-bottom: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .template-info { flex: 1; }
-  .template-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
-  .template-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
-
-  /* Taxonomy viewer */
-  .taxonomy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-  .tax-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-  }
-  .tax-card-header {
-    background: var(--surface2);
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--accent2);
-    font-weight: 500;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .tax-card-body { padding: 12px 14px; }
-  .tax-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
-  .tax-row:last-child { border-bottom: none; }
-  .tax-key { color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
-  .tax-vals { color: var(--text); text-align: right; line-height: 1.5; }
-  .pill {
-    display: inline-block;
-    background: rgba(108,99,255,0.15);
-    color: var(--accent2);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 10px;
-    font-family: var(--mono);
-    margin: 1px;
-  }
-
-  .error-msg { color: var(--danger); font-size: 12px; font-family: var(--mono); margin-top: 10px; padding: 10px 14px; background: rgba(240,82,82,0.08); border-radius: 8px; border: 1px solid rgba(240,82,82,0.2); }
-
-  input[type="file"] { display: none; }
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0f0f11;--surface:#18181c;--surface2:#202026;--border:#2a2a32;--border2:#38383f;--accent:#6c63ff;--accent2:#a89cff;--text:#f0eeff;--muted:#7b7a8e;--success:#3ecf8e;--warn:#f0a500;--danger:#f05252;--mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+.header{border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;background:var(--bg);z-index:100}
+.logo{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--accent2);letter-spacing:-.02em}
+.logo span{color:var(--muted)}
+.api-area{display:flex;align-items:center;gap:8px}
+.api-area input{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;width:240px;outline:none}
+.api-area input:focus{border-color:var(--accent)}
+.api-save{font-size:12px;font-family:var(--mono);padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500}
+.api-save:hover{background:var(--accent2);color:var(--bg)}
+.api-status{font-size:11px;font-family:var(--mono)}
+.api-status.ok{color:var(--success)}.api-status.no{color:var(--muted)}
+.main{max-width:1100px;margin:0 auto;padding:2rem}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:2rem}
+.tab{padding:10px 20px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;font-family:var(--mono);letter-spacing:.02em}
+.tab:hover{color:var(--text)}.tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.field label{display:block;font-size:11px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.field input,.field textarea,.field select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent)}
+.field select option{background:var(--surface2)}
+.field textarea{min-height:80px;resize:vertical}
+.btn-primary{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:background .15s;letter-spacing:.01em}
+.btn-primary:hover{background:#7d75ff}.btn-primary:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+.result-box{margin-top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.result-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface2)}
+.result-category{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--accent2)}
+.conf-badge{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:99px;font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+.conf-high{background:rgba(62,207,142,.15);color:var(--success)}
+.conf-medium{background:rgba(240,165,0,.15);color:var(--warn)}
+.conf-low{background:rgba(240,82,82,.15);color:var(--danger)}
+.result-reasoning{padding:10px 16px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);font-style:italic}
+.attr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1px;background:var(--border)}
+.attr-cell{background:var(--surface);padding:12px 14px}.attr-cell:hover{background:var(--surface2)}
+.attr-key{font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.attr-value{font-size:13px;font-weight:500;color:var(--text)}
+.attr-value.null-val{color:var(--border2);font-style:italic;font-weight:400;font-size:12px}
+.drop-zone{border:2px dashed var(--border2);border-radius:12px;padding:3rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:1rem}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(108,99,255,.05)}
+.drop-icon{font-size:32px;margin-bottom:12px;opacity:.5}
+.drop-title{font-size:15px;font-weight:500;margin-bottom:6px}
+.drop-sub{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.format-badges{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.fmt-badge{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:4px;border:1px solid var(--border2);color:var(--muted)}
+.fmt-pdf{border-color:rgba(240,82,82,.4);color:#f07070;background:rgba(240,82,82,.08)}
+.fmt-csv{border-color:rgba(62,207,142,.4);color:var(--success);background:rgba(62,207,142,.08)}
+.fmt-xlsx{border-color:rgba(108,99,255,.4);color:var(--accent2);background:rgba(108,99,255,.08)}
+.bulk-btn{padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--sans);transition:all .15s;border:1px solid var(--border2);background:var(--surface);color:var(--text)}
+.bulk-btn:hover{border-color:var(--accent);color:var(--accent2)}
+.bulk-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.bulk-btn.primary:hover{background:#7d75ff}
+.bulk-btn.success{background:rgba(62,207,142,.15);border-color:var(--success);color:var(--success)}
+.bulk-btn.danger{background:rgba(240,82,82,.1);border-color:var(--danger);color:var(--danger)}
+.bulk-btn:disabled{opacity:.4;cursor:not-allowed}
+.progress-bar{height:3px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:1rem}
+.progress-fill{height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
+.progress-label{font-size:11px;font-family:var(--mono);color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between}
+.bulk-controls{display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:var(--surface2)}
+th{padding:10px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.status-cell{display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-done{background:var(--success)}.dot-pending{background:var(--border2)}
+.dot-error{background:var(--danger)}.dot-running{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pdf-status{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:1rem;font-family:var(--mono);font-size:12px}
+.pdf-status-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.pdf-step{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--muted)}
+.pdf-step.active{color:var(--accent2)}.pdf-step.done{color:var(--success)}.pdf-step.error{color:var(--danger)}
+.pdf-step-icon{font-size:12px;width:16px;text-align:center;flex-shrink:0}
+.error-msg{color:var(--danger);font-size:12px;font-family:var(--mono);margin-top:10px;padding:10px 14px;background:rgba(240,82,82,.08);border-radius:8px;border:1px solid rgba(240,82,82,.2)}
+/* taxonomy proposal */
+.tax-proposal{background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:1.25rem;margin-bottom:1rem}
+.tax-proposal-title{font-family:var(--mono);font-size:11px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.attr-tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.attr-tag{display:inline-flex;align-items:center;gap:4px;background:rgba(108,99,255,.15);color:var(--accent2);border:1px solid rgba(108,99,255,.3);border-radius:6px;padding:4px 10px;font-size:12px;font-family:var(--mono)}
+.attr-tag .remove{cursor:pointer;color:var(--muted);font-size:14px;line-height:1}.attr-tag .remove:hover{color:var(--danger)}
+.add-attr-row{display:flex;gap:8px;margin-bottom:12px}
+.add-attr-row input{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:6px 10px;outline:none}
+.add-attr-row input:focus{border-color:var(--accent)}
+.add-attr-row button{padding:6px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--accent2);font-family:var(--mono);font-size:12px;cursor:pointer}
+.add-attr-row button:hover{border-color:var(--accent)}
+/* knowledge base */
+.kb-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.kb-card-header{background:var(--surface2);padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.kb-cat-name{font-family:var(--mono);font-size:13px;color:var(--accent2);font-weight:500}
+.kb-card-body{padding:12px 14px}
+.kb-attr-list{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.kb-pill{display:inline-block;background:rgba(108,99,255,.12);color:var(--accent2);border-radius:4px;padding:2px 8px;font-size:11px;font-family:var(--mono)}
+.kb-meta{font-size:10px;color:var(--muted);font-family:var(--mono)}
+.hint-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:1rem;line-height:1.7}
+.hint-box strong{color:var(--text2,var(--text))}
+.section-title{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+.toggle-row{display:flex;gap:12px;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.toggle-row label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-family:var(--mono)}
+.toggle-row input[type=radio]{accent-color:var(--accent);width:14px;height:14px}
+.template-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.template-info .template-title{font-size:13px;font-weight:500;margin-bottom:4px}
+.template-info .template-sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
+input[type=file]{display:none}
 </style>
 </head>
 <body>
@@ -384,43 +120,37 @@
 <div class="header">
   <div class="logo">Taxo<span>AI</span></div>
   <div class="api-area">
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." />
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..."/>
     <button class="api-save" onclick="saveKey()">Save key</button>
     <span class="api-status no" id="apiStatus">no key</span>
   </div>
 </div>
 
 <div class="main">
-
   <div class="tabs">
     <div class="tab active" onclick="switchTab('single')">Single item</div>
     <div class="tab" onclick="switchTab('bulk')">Bulk import</div>
-    <div class="tab" onclick="switchTab('taxonomy')">Taxonomy</div>
+    <div class="tab" onclick="switchTab('kb')">Knowledge base</div>
   </div>
 
-  <!-- SINGLE ITEM -->
+  <!-- SINGLE -->
   <div class="tab-panel active" id="tab-single">
     <div class="form-grid">
       <div class="field">
         <label>Part number</label>
-        <input type="text" id="s-partnum" placeholder="e.g. DRL-HSS-3/8-JL" />
+        <input type="text" id="s-partnum" placeholder="e.g. BBML74201"/>
       </div>
       <div class="field">
-        <label>Category (optional — AI will detect)</label>
-        <select id="s-category">
-          <option value="">Auto-detect</option>
-          <option>Drill Bits</option>
-          <option>Taps</option>
-          <option>Dies</option>
-          <option>Carbide Burrs</option>
-        </select>
+        <label>Category — type it (AI adapts)</label>
+        <input type="text" id="s-category" placeholder="e.g. Drill Bits, Safety Glasses, Wrenches" list="kb-cats-list"/>
+        <datalist id="kb-cats-list"></datalist>
       </div>
     </div>
-    <div class="field" style="margin-bottom:16px;">
+    <div class="field" style="margin-bottom:16px">
       <label>Product name / description</label>
-      <textarea id="s-desc" placeholder="e.g. 3/8&quot; High Speed Steel Jobber Length Drill Bit, 118° Point, Black Oxide Finish"></textarea>
+      <textarea id="s-desc" placeholder="e.g. 3/8&quot; HSS Jobber Drill Bit 118° Point Black Oxide"></textarea>
     </div>
-    <button class="classify-btn" id="singleBtn" onclick="classifySingle()">Classify product</button>
+    <button class="btn-primary" id="singleBtn" onclick="classifySingle()">Classify product</button>
     <div id="single-error"></div>
     <div id="single-result"></div>
   </div>
@@ -430,22 +160,73 @@
     <div class="template-section">
       <div class="template-info">
         <div class="template-title">Download import template</div>
-        <div class="template-sub">CSV with columns: part_number, product_name, category (optional)</div>
+        <div class="template-sub">CSV: part_number, product_name, category (optional)</div>
       </div>
       <button class="bulk-btn" onclick="downloadTemplate()">Download template</button>
     </div>
 
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+    <!-- Category + Mode row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">
+      <div class="field">
+        <label>Category for this PDF / file</label>
+        <input type="text" id="b-category" placeholder="e.g. Drill Bits, Safety Glasses" list="kb-cats-list2"/>
+        <datalist id="kb-cats-list2"></datalist>
+      </div>
+      <div class="field">
+        <label>Extract</label>
+        <div class="toggle-row" style="margin-bottom:0;margin-top:8px">
+          <label><input type="radio" name="pdf-mode" value="individual" checked> Individual items</label>
+          <label><input type="radio" name="pdf-mode" value="sets"> Sets</label>
+          <label><input type="radio" name="pdf-mode" value="both"> Both</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="drop-zone" id="dropZone"
+      onclick="document.getElementById('fileInput').click()"
       ondragover="event.preventDefault();this.classList.add('drag-over')"
       ondragleave="this.classList.remove('drag-over')"
       ondrop="handleDrop(event)">
       <div class="drop-icon">⬆</div>
-      <div class="drop-title">Drop your CSV or Excel file here</div>
-      <div class="drop-sub">or click to browse — .csv / .xlsx / .xls</div>
+      <div class="drop-title">Drop your file here</div>
+      <div class="drop-sub">or click to browse</div>
+      <div class="format-badges">
+        <span class="fmt-badge fmt-pdf">PDF</span>
+        <span class="fmt-badge fmt-csv">CSV</span>
+        <span class="fmt-badge fmt-xlsx">XLSX / XLS</span>
+      </div>
     </div>
-    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFile(this.files[0])" />
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf" onchange="handleFile(this.files[0])"/>
 
-    <div id="bulk-controls" style="display:none;">
+    <!-- Taxonomy proposal box -->
+    <div id="tax-proposal-box" style="display:none">
+      <div class="tax-proposal">
+        <div class="tax-proposal-title">Proposed taxonomy — <span id="tax-prop-cat"></span> &nbsp;<span style="color:var(--muted);font-weight:400">Review and edit before classifying</span></div>
+        <div class="attr-tag-row" id="attr-tag-row"></div>
+        <div class="add-attr-row">
+          <input type="text" id="new-attr-input" placeholder="Add attribute..." onkeydown="if(event.key==='Enter')addAttrTag()"/>
+          <button onclick="addAttrTag()">+ Add</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="bulk-btn primary" onclick="approveAndProceed()">Approve & classify</button>
+          <button class="bulk-btn success" onclick="saveToKB()">Save to knowledge base</button>
+          <button class="bulk-btn" onclick="regenerateTaxonomy()">Regenerate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF status -->
+    <div id="pdf-status-box" style="display:none">
+      <div class="pdf-status">
+        <div class="pdf-status-title">PDF processing</div>
+        <div class="pdf-step" id="pstep-extract"><span class="pdf-step-icon">○</span> Extracting text from PDF</div>
+        <div class="pdf-step" id="pstep-tax"><span class="pdf-step-icon">○</span> Building taxonomy</div>
+        <div class="pdf-step" id="pstep-parse"><span class="pdf-step-icon">○</span> Parsing product rows with AI</div>
+        <div class="pdf-step" id="pstep-load"><span class="pdf-step-icon">○</span> Loading into classifier</div>
+      </div>
+    </div>
+
+    <div id="bulk-controls" style="display:none">
       <div class="progress-label">
         <span id="prog-label">Ready</span>
         <span id="prog-count"></span>
@@ -455,437 +236,688 @@
         <button class="bulk-btn primary" id="runBulkBtn" onclick="runBulk()">Run classification</button>
         <button class="bulk-btn success" id="exportBtn" onclick="exportResults()" style="display:none">Export results</button>
         <button class="bulk-btn" onclick="resetBulk()">Clear</button>
-        <span id="bulk-summary" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-left:auto;"></span>
+        <span id="bulk-summary" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-left:auto"></span>
       </div>
       <div class="table-wrap">
         <table id="bulkTable">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Part number</th>
-              <th>Product name</th>
-              <th>Status</th>
-              <th>Category</th>
-              <th>Size</th>
-              <th>Type</th>
-              <th>Material</th>
-              <th>Point-Angle</th>
-              <th>Finish</th>
-              <th>Flutes</th>
-              <th>Grind Limits</th>
-              <th>Cut Type</th>
-              <th>Shape</th>
-              <th>TPI</th>
-              <th>Chamfer</th>
-              <th>Confidence</th>
-            </tr>
-          </thead>
+          <thead><tr id="bulk-thead"><th>#</th><th>Part number</th><th>Product name</th><th>Status</th><th>Category</th><th>Confidence</th></tr></thead>
           <tbody id="bulkBody"></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TAXONOMY -->
-  <div class="tab-panel" id="tab-taxonomy">
-    <div class="taxonomy-grid" id="taxonomyGrid"></div>
+  <!-- KNOWLEDGE BASE -->
+  <div class="tab-panel" id="tab-kb">
+    <div class="hint-box">
+      The knowledge base is <strong>permanent</strong> — it never gets deleted when the app is updated. Every taxonomy you approve is stored here. When you work on a category again, the app loads it instantly instead of re-building from scratch.
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center">
+      <button class="bulk-btn primary" onclick="showAddKB()">+ Add manually</button>
+      <span style="font-size:11px;font-family:var(--mono);color:var(--muted)" id="kb-count"></span>
+    </div>
+    <div id="add-kb-form" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.5rem">
+      <div class="section-title">New category</div>
+      <div class="form-grid" style="margin-bottom:10px">
+        <div class="field"><label>Category name</label><input type="text" id="kb-add-cat" placeholder="e.g. Safety Glasses"/></div>
+        <div class="field"><label>Attributes (comma-separated)</label><input type="text" id="kb-add-attrs" placeholder="e.g. Lens Color, Frame Material, ANSI Rating"/></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="bulk-btn primary" onclick="addKBManual()">Save</button>
+        <button class="bulk-btn" onclick="document.getElementById('add-kb-form').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <div id="kb-list"></div>
   </div>
-
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-const TAXONOMY = {
-  "Drill Bits": {
-    size_attr: "Diameter",
-    types: ["Jobber Length","Mechanics Length","Screw Machine","Aircraft Extension","Taper Length","Reduced Shank","Taper Shank","Reamers","Step Drill","Countersink"],
-    extra_attrs: ["Material","Point-Angle","Finish","Flutes","Grind Limits","Cut Type"]
-  },
-  "Taps": {
-    size_attr: "Thread Size",
-    types: ["Hand Taps","Spiral Point","Spiral Flute","Pipe Taps"],
-    extra_attrs: ["Material","TPI","Chamfer","Cut Type"]
-  },
-  "Dies": {
-    size_attr: "Thread Size",
-    types: ["Round","Hex","Adjustable"],
-    extra_attrs: ["Material","TPI","Cut Type"]
-  },
-  "Carbide Burrs": {
-    size_attr: "Shank Size",
-    types: [],
-    extra_attrs: ["Shape","Cut Type","Flutes","Finish"]
+// ── Storage keys ─────────────────────────────────────────────────────────────
+const KB_KEY   = 'taxoai_kb_v1';      // knowledge base — NEVER deleted on rebuild
+const API_KEY  = 'taxoai_key';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let apiKey   = localStorage.getItem(API_KEY) || '';
+let bulkRows = [], bulkResults = [], running = false;
+let currentAttrs   = [];   // active taxonomy attributes for current session
+let currentCat     = '';
+let pdfRawText     = '';
+let pdfChunks      = [];
+let pdfChunkIdx    = 0;
+let pdfAllProducts = [];
+
+// ── Knowledge base ─────────────────────────────────────────────────────────────
+function loadKB(){ return JSON.parse(localStorage.getItem(KB_KEY)||'{}') }
+function saveKB(kb){ localStorage.setItem(KB_KEY, JSON.stringify(kb)) }
+
+function getKBTaxonomy(cat){
+  const kb = loadKB();
+  const key = cat.trim().toLowerCase();
+  for(const k in kb){ if(k.toLowerCase()===key) return kb[k].attrs; }
+  return null;
+}
+
+function saveKBEntry(cat, attrs){
+  const kb = loadKB();
+  kb[cat.trim()] = { attrs, saved: new Date().toISOString() };
+  saveKB(kb);
+  renderKB();
+  populateCatDatalist();
+}
+
+function renderKB(){
+  const kb = loadKB();
+  const keys = Object.keys(kb);
+  document.getElementById('kb-count').textContent = keys.length + ' categories saved';
+  if(!keys.length){
+    document.getElementById('kb-list').innerHTML = '<p style="color:var(--muted);font-size:13px;font-family:var(--mono)">No categories saved yet. Classify some products and click "Save to knowledge base" to build it up.</p>';
+    return;
   }
-};
+  document.getElementById('kb-list').innerHTML = keys.map(cat => {
+    const entry = kb[cat];
+    const pills = entry.attrs.map(a=>`<span class="kb-pill">${a}</span>`).join('');
+    const date = entry.saved ? new Date(entry.saved).toLocaleDateString() : '';
+    return `<div class="kb-card">
+      <div class="kb-card-header">
+        <span class="kb-cat-name">${cat}</span>
+        <div style="display:flex;gap:6px">
+          <button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="editKBEntry('${cat}')">Edit</button>
+          <button class="bulk-btn danger" style="padding:4px 10px;font-size:11px" onclick="deleteKBEntry('${cat}')">Delete</button>
+        </div>
+      </div>
+      <div class="kb-card-body">
+        <div class="kb-attr-list">${pills}</div>
+        <div class="kb-meta">${entry.attrs.length} attributes · saved ${date}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-const ALL_ATTRS = ["Size","Type","Material","Point-Angle","Finish","Flutes","Grind Limits","Cut Type","Shape","TPI","Chamfer"];
+function populateCatDatalist(){
+  const kb = loadKB();
+  const cats = Object.keys(kb);
+  ['kb-cats-list','kb-cats-list2'].forEach(id=>{
+    const dl = document.getElementById(id);
+    if(dl) dl.innerHTML = cats.map(c=>`<option value="${c}">`).join('');
+  });
+}
 
-let apiKey = localStorage.getItem('taxoai_key') || '';
-let bulkRows = [];
-let bulkResults = [];
-let running = false;
+function showAddKB(){ document.getElementById('add-kb-form').style.display='block'; }
 
-// Init
-window.onload = () => {
-  if (apiKey) {
-    document.getElementById('apiKeyInput').value = apiKey;
-    document.getElementById('apiStatus').textContent = 'key saved';
-    document.getElementById('apiStatus').className = 'api-status ok';
-  }
-  renderTaxonomy();
-};
+function addKBManual(){
+  const cat = document.getElementById('kb-add-cat').value.trim();
+  const attrs = document.getElementById('kb-add-attrs').value.split(',').map(a=>a.trim()).filter(Boolean);
+  if(!cat||!attrs.length){ alert('Category name and at least one attribute required.'); return; }
+  saveKBEntry(cat, attrs);
+  document.getElementById('kb-add-cat').value='';
+  document.getElementById('kb-add-attrs').value='';
+  document.getElementById('add-kb-form').style.display='none';
+}
 
-function saveKey() {
+function deleteKBEntry(cat){
+  if(!confirm(`Delete taxonomy for "${cat}"?`)) return;
+  const kb = loadKB();
+  delete kb[cat];
+  saveKB(kb);
+  renderKB();
+  populateCatDatalist();
+}
+
+function editKBEntry(cat){
+  const kb = loadKB();
+  const entry = kb[cat];
+  document.getElementById('kb-add-cat').value = cat;
+  document.getElementById('kb-add-attrs').value = entry.attrs.join(', ');
+  document.getElementById('add-kb-form').style.display='block';
+  // Remove old entry when saving
+  document.getElementById('add-kb-form').dataset.editingCat = cat;
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+function saveKey(){
   const k = document.getElementById('apiKeyInput').value.trim();
-  if (!k) return;
+  if(!k) return;
   apiKey = k;
-  localStorage.setItem('taxoai_key', k);
+  localStorage.setItem(API_KEY, k);
   document.getElementById('apiStatus').textContent = 'key saved';
   document.getElementById('apiStatus').className = 'api-status ok';
 }
 
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  const tabs = ['single','bulk','taxonomy'];
-  const idx = tabs.indexOf(name);
-  document.querySelectorAll('.tab')[idx].classList.add('active');
-  document.getElementById('tab-' + name).classList.add('active');
+async function callClaude(system, userMsg, maxTokens=1000){
+  if(!apiKey) apiKey = localStorage.getItem(API_KEY)||'';
+  if(!apiKey) throw new Error('No API key — paste your Anthropic key in the header and click Save key.');
+  const res = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,system,messages:[{role:'user',content:userMsg}]})
+  });
+  if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`API error ${res.status}`); }
+  const data = await res.json();
+  const raw = data.content.map(b=>b.text||'').join('');
+  return raw.replace(/```json|```/g,'').trim();
 }
 
-function buildSystemPrompt() {
-  return `You are a product taxonomy classification engine for an industrial e-commerce catalog. Extract structured filter attributes from product part numbers and names/descriptions.
+// ── Taxonomy builder ──────────────────────────────────────────────────────────
+async function buildTaxonomy(cat, sampleText){
+  const existing = getKBTaxonomy(cat);
+  if(existing){ return existing; }
+  // Build from AI
+  const system = `You are a product taxonomy expert for e-commerce and industrial distribution.
+Given a product category name and optional sample product text, return the optimal list of filter attributes for that category.
+Rules:
+- Return 6-14 attributes that buyers would use to filter/search this product type
+- Attributes should be specific and useful (Size, Material, Finish, Rating, Color, etc.)
+- Include "Size" if applicable — it is always the most important filter
+- Return ONLY a JSON array of attribute name strings, no explanation
+Example: ["Size","Material","Type","Finish","Point Angle","Flutes","Cut Type","Coating"]`;
+  const userMsg = `Category: ${cat}\nSample products:\n${sampleText||'(none provided)'}`;
+  const raw = await callClaude(system, userMsg, 500);
+  return JSON.parse(raw);
+}
 
-Taxonomy:
-${JSON.stringify(TAXONOMY, null, 2)}
+// ── Taxonomy proposal UI ──────────────────────────────────────────────────────
+function renderAttrTags(attrs){
+  currentAttrs = [...attrs];
+  document.getElementById('attr-tag-row').innerHTML = attrs.map((a,i)=>
+    `<span class="attr-tag">${a}<span class="remove" onclick="removeAttr(${i})">×</span></span>`
+  ).join('');
+}
+
+function removeAttr(i){
+  currentAttrs.splice(i,1);
+  renderAttrTags(currentAttrs);
+}
+
+function addAttrTag(){
+  const inp = document.getElementById('new-attr-input');
+  const val = inp.value.trim();
+  if(!val) return;
+  currentAttrs.push(val);
+  renderAttrTags(currentAttrs);
+  inp.value='';
+}
+
+async function regenerateTaxonomy(){
+  const cat = document.getElementById('b-category').value.trim() || currentCat;
+  if(!cat) return;
+  document.getElementById('tax-prop-cat').textContent = cat;
+  document.getElementById('attr-tag-row').innerHTML = '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">Regenerating...</span>';
+  try {
+    const attrs = await buildTaxonomy(cat + '__force__', '');
+    renderAttrTags(attrs);
+  } catch(e){ alert(e.message); }
+}
+
+function saveToKB(){
+  if(!currentCat||!currentAttrs.length) return;
+  saveKBEntry(currentCat, currentAttrs);
+  document.getElementById('tax-proposal-box').querySelector('.tax-proposal-title').innerHTML =
+    `Proposed taxonomy — <span id="tax-prop-cat">${currentCat}</span> &nbsp;<span style="color:var(--success);font-weight:400">✓ Saved to knowledge base</span>`;
+}
+
+function approveAndProceed(){
+  document.getElementById('tax-proposal-box').style.display='none';
+  buildBulkTableHeaders();
+  document.getElementById('bulk-controls').style.display='block';
+  document.getElementById('bulk-summary').textContent = `${bulkRows.length} rows ready — ${currentAttrs.length} attributes`;
+  renderBulkTable();
+}
+
+// ── Classification system prompt (dynamic) ────────────────────────────────────
+function buildSystemPrompt(cat, attrs){
+  return `You are a product attribute extraction engine for e-commerce catalog management.
+
+Category: ${cat||'auto-detect'}
+Required attributes to extract: ${attrs.join(', ')}
 
 Rules:
-- Detect the category from the input. If not obvious, return your best guess.
-- Extract ONLY attributes clearly determinable from the input. Return null for unknown.
-- Size: extract the measurement with unit exactly (e.g. "3/8\"", "1/4 inch", "M10").
-- Type: match to the closest taxonomy type value for the detected category.
-- Return confidence: "high" (most attrs clear), "medium" (some inferred), "low" (vague input).
-- reasoning: 1 sentence explaining your parsing.
+- Extract ONLY attributes that are clearly determinable from the input. Return null for unknown.
+- Size: extract the measurement with unit exactly. If size is in part number (e.g. "3/8" in BBML74201) or in a [Size: X] hint, use it.
+- If input has [Size: X] prefix, that IS the Size value.
+- confidence: "high" (most attrs clear), "medium" (some inferred), "low" (vague input).
+- reasoning: 1 sentence.
 
-Return ONLY valid JSON, no markdown, no preamble:
+Return ONLY valid JSON, no markdown:
 {
-  "category": "...",
+  "category": "${cat||'detected category'}",
   "confidence": "high|medium|low",
   "reasoning": "...",
-  "attributes": {
-    "Size": null,
-    "Type": null,
-    "Material": null,
-    "Point-Angle": null,
-    "Finish": null,
-    "Flutes": null,
-    "Grind Limits": null,
-    "Cut Type": null,
-    "Shape": null,
-    "TPI": null,
-    "Chamfer": null
-  }
+  "attributes": {${attrs.map(a=>`"${a}": null`).join(',')}}
 }`;
 }
 
-async function callAPI(partnum, desc) {
-  if (!apiKey) throw new Error('No API key — enter your Anthropic key in the header and click Save.');
-  const msg = `Part Number: ${partnum || 'not provided'}\nProduct Name/Description: ${desc}`;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 800,
-      system: buildSystemPrompt(),
-      messages: [{ role: 'user', content: msg }]
-    })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `API error ${res.status}`);
-  }
-  const data = await res.json();
-  const raw = data.content.map(b => b.text || '').join('');
-  const clean = raw.replace(/```json|```/g, '').trim();
-  return JSON.parse(clean);
-}
-
-// Single
-async function classifySingle() {
+// ── Single classify ───────────────────────────────────────────────────────────
+async function classifySingle(){
   const partnum = document.getElementById('s-partnum').value.trim();
-  const desc = document.getElementById('s-desc').value.trim();
-  const cat = document.getElementById('s-category').value;
-  const errDiv = document.getElementById('single-error');
-  errDiv.innerHTML = '';
-  if (!desc) { errDiv.innerHTML = '<div class="error-msg">Enter a product name or description.</div>'; return; }
-
+  const desc    = document.getElementById('s-desc').value.trim();
+  const cat     = document.getElementById('s-category').value.trim();
+  const errDiv  = document.getElementById('single-error');
+  errDiv.innerHTML='';
+  if(!desc){ errDiv.innerHTML='<div class="error-msg">Enter a product name or description.</div>'; return; }
   const btn = document.getElementById('singleBtn');
-  btn.disabled = true;
-  btn.textContent = 'Classifying...';
-  document.getElementById('single-result').innerHTML = '';
-
+  btn.disabled=true; btn.textContent='Building taxonomy...';
+  document.getElementById('single-result').innerHTML='';
   try {
-    const input = cat ? `Category hint: ${cat}\nPart Number: ${partnum || 'n/a'}\nProduct Name: ${desc}` : null;
-    const result = await callAPI(partnum, cat ? `[Category: ${cat}] ${desc}` : desc);
-    renderSingleResult(result);
-  } catch(e) {
-    errDiv.innerHTML = `<div class="error-msg">${e.message}</div>`;
+    let attrs = cat ? getKBTaxonomy(cat) : null;
+    if(!attrs){ attrs = await buildTaxonomy(cat||'auto', desc); }
+    btn.textContent='Classifying...';
+    const sizeHint = extractSizeFromPartNum(partnum);
+    const msg = `Part Number: ${partnum||'n/a'}\nProduct: ${sizeHint?`[Size: ${sizeHint}] `:''}${desc}`;
+    const raw = await callClaude(buildSystemPrompt(cat, attrs), msg, 800);
+    const result = JSON.parse(raw);
+    renderSingleResult(result, attrs);
+  } catch(e){
+    errDiv.innerHTML=`<div class="error-msg">${e.message}</div>`;
   }
-  btn.disabled = false;
-  btn.textContent = 'Classify product';
+  btn.disabled=false; btn.textContent='Classify product';
 }
 
-function renderSingleResult(r) {
-  const conf = r.confidence || 'medium';
-  const attrs = r.attributes || {};
-  const filled = ALL_ATTRS.filter(k => attrs[k]).length;
-  const cards = ALL_ATTRS.map(k => {
-    const v = attrs[k];
-    return `<div class="attr-cell">
-      <div class="attr-key">${k}</div>
-      <div class="attr-value ${v ? '' : 'null-val'}">${v || '—'}</div>
-    </div>`;
+function renderSingleResult(r, attrs){
+  const conf  = r.confidence||'medium';
+  const a     = r.attributes||{};
+  const allAttrs = attrs || Object.keys(a);
+  const filled = allAttrs.filter(k=>a[k]).length;
+  const cards = allAttrs.map(k=>{
+    const v=a[k];
+    return `<div class="attr-cell"><div class="attr-key">${k}</div><div class="attr-value ${v?'':'null-val'}">${v||'—'}</div></div>`;
   }).join('');
-
-  document.getElementById('single-result').innerHTML = `
-    <div class="result-box" style="margin-top:1.5rem;">
+  document.getElementById('single-result').innerHTML=`
+    <div class="result-box" style="margin-top:1.5rem">
       <div class="result-header">
-        <span class="result-category">${r.category || 'Unknown'}</span>
+        <span class="result-category">${r.category||'Unknown'}</span>
         <span class="conf-badge conf-${conf}">${conf}</span>
-        <span style="margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--muted);">${filled}/${ALL_ATTRS.length} attrs</span>
+        <span style="margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--muted)">${filled}/${allAttrs.length} attrs</span>
       </div>
-      <div class="result-reasoning">${r.reasoning || ''}</div>
+      <div class="result-reasoning">${r.reasoning||''}</div>
       <div class="attr-grid">${cards}</div>
     </div>`;
 }
 
-// Bulk
-function handleDrop(e) {
+// ── Size extraction from part number ─────────────────────────────────────────
+function extractSizeFromPartNum(pn){
+  if(!pn) return '';
+  // Fractional: 3/8, 1/16, 7/64 etc
+  const frac = pn.match(/\b(\d+\/\d+)\b/);
+  if(frac) return frac[1];
+  // Decimal: 0.0625, .375
+  const dec = pn.match(/\b(0?\.\d+)\b/);
+  if(dec) return dec[1];
+  // Metric: M6, M10
+  const met = pn.match(/\bM(\d+(?:\.\d+)?)\b/i);
+  if(met) return met[0];
+  return '';
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+function handleDrop(e){
   e.preventDefault();
   document.getElementById('dropZone').classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) processFile(file);
+  if(file) processFile(file);
 }
+function handleFile(file){ if(file) processFile(file); }
 
-function handleFile(file) {
-  if (file) processFile(file);
-}
-
-function processFile(file) {
+function processFile(file){
+  document.getElementById('pdf-status-box').style.display='none';
+  document.getElementById('tax-proposal-box').style.display='none';
+  document.getElementById('bulk-controls').style.display='none';
+  if(file.name.toLowerCase().endsWith('.pdf')){
+    processPdfFile(file);
+    return;
+  }
   const reader = new FileReader();
-  reader.onload = (e) => {
-    let rows = [];
-    if (file.name.endsWith('.csv')) {
-      const text = e.target.result;
-      const lines = text.split('\n').filter(l => l.trim());
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,'').toLowerCase());
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(',').map(v => v.trim().replace(/"/g,''));
-        const row = {};
-        headers.forEach((h,idx) => row[h] = vals[idx] || '');
-        if (row.product_name || row.name || row.description) rows.push(row);
+  reader.onload = async (e)=>{
+    let rows=[];
+    if(file.name.endsWith('.csv')){
+      const lines = e.target.result.split('\n').filter(l=>l.trim());
+      const headers = lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+      for(let i=1;i<lines.length;i++){
+        const vals = lines[i].split(',').map(v=>v.trim().replace(/"/g,''));
+        const row={}; headers.forEach((h,idx)=>row[h]=vals[idx]||'');
+        if(row.product_name||row.name||row.description) rows.push(row);
       }
     } else {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wb = XLSX.read(e.target.result,{type:'array'});
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      rows = data.map(r => {
-        const norm = {};
-        Object.keys(r).forEach(k => norm[k.toLowerCase().replace(/\s+/g,'_')] = r[k]);
-        return norm;
-      });
+      const data = XLSX.utils.sheet_to_json(ws,{defval:''});
+      rows = data.map(r=>{ const n={}; Object.keys(r).forEach(k=>n[k.toLowerCase().replace(/\s+/g,'_')]=r[k]); return n; });
     }
-    bulkRows = rows.filter(r => r.product_name || r.name || r.description || r.product_description);
-    bulkResults = bulkRows.map(() => ({ status: 'pending', result: null }));
-    renderBulkTable();
-    document.getElementById('bulk-controls').style.display = 'block';
-    document.getElementById('bulk-summary').textContent = `${bulkRows.length} rows loaded`;
+    bulkRows = rows.filter(r=>r.product_name||r.name||r.description||r.product_description);
+    await initBulkWithTaxonomy();
   };
-  if (file.name.endsWith('.csv')) reader.readAsText(file);
+  if(file.name.endsWith('.csv')) reader.readAsText(file);
   else reader.readAsArrayBuffer(file);
 }
 
-function getName(row) {
-  return row.product_name || row.name || row.description || row.product_description || '';
-}
-function getPartNum(row) {
-  return row.part_number || row.sku || row.item_number || row.partnum || '';
-}
-
-function renderBulkTable() {
-  const tbody = document.getElementById('bulkBody');
-  tbody.innerHTML = bulkRows.map((row, i) => {
-    const r = bulkResults[i];
-    const st = r.status;
-    const dotClass = { pending:'dot-pending', running:'dot-running', done:'dot-done', error:'dot-error' }[st] || 'dot-pending';
-    const res = r.result;
-    const a = res?.attributes || {};
-    return `<tr id="brow-${i}">
-      <td style="color:var(--muted)">${i+1}</td>
-      <td title="${getPartNum(row)}">${getPartNum(row) || '—'}</td>
-      <td title="${getName(row)}">${getName(row).substring(0,40)}${getName(row).length>40?'...':''}</td>
-      <td><div class="status-cell"><div class="dot ${dotClass}"></div><span style="color:var(--muted)">${st}</span></div></td>
-      <td>${res?.category || ''}</td>
-      <td>${a.Size || ''}</td>
-      <td>${a.Type || ''}</td>
-      <td>${a.Material || ''}</td>
-      <td>${a['Point-Angle'] || ''}</td>
-      <td>${a.Finish || ''}</td>
-      <td>${a.Flutes || ''}</td>
-      <td>${a['Grind Limits'] || ''}</td>
-      <td>${a['Cut Type'] || ''}</td>
-      <td>${a.Shape || ''}</td>
-      <td>${a.TPI || ''}</td>
-      <td>${a.Chamfer || ''}</td>
-      <td>${res?.confidence || ''}</td>
-    </tr>`;
-  }).join('');
-}
-
-function updateRow(i) {
-  const row = bulkRows[i];
-  const r = bulkResults[i];
-  const st = r.status;
-  const dotClass = { pending:'dot-pending', running:'dot-running', done:'dot-done', error:'dot-error' }[st];
-  const res = r.result;
-  const a = res?.attributes || {};
-  const tr = document.getElementById('brow-' + i);
-  if (!tr) return;
-  tr.innerHTML = `
-    <td style="color:var(--muted)">${i+1}</td>
-    <td title="${getPartNum(row)}">${getPartNum(row) || '—'}</td>
-    <td title="${getName(row)}">${getName(row).substring(0,40)}${getName(row).length>40?'...':''}</td>
-    <td><div class="status-cell"><div class="dot ${dotClass}"></div><span style="color:var(--muted)">${st}</span></div></td>
-    <td>${res?.category || ''}</td>
-    <td>${a.Size || ''}</td>
-    <td>${a.Type || ''}</td>
-    <td>${a.Material || ''}</td>
-    <td>${a['Point-Angle'] || ''}</td>
-    <td>${a.Finish || ''}</td>
-    <td>${a.Flutes || ''}</td>
-    <td>${a['Grind Limits'] || ''}</td>
-    <td>${a['Cut Type'] || ''}</td>
-    <td>${a.Shape || ''}</td>
-    <td>${a.TPI || ''}</td>
-    <td>${a.Chamfer || ''}</td>
-    <td>${res?.confidence || ''}</td>`;
-}
-
-async function runBulk() {
-  if (running) return;
-  if (!apiKey) {
-    alert('Enter your Anthropic API key in the header first.');
+// ── Taxonomy init for bulk ────────────────────────────────────────────────────
+async function initBulkWithTaxonomy(){
+  const cat = document.getElementById('b-category').value.trim();
+  currentCat = cat;
+  // Check KB first
+  const existing = cat ? getKBTaxonomy(cat) : null;
+  if(existing){
+    currentAttrs = existing;
+    showTaxonomyProposal(cat, existing, true);
     return;
   }
-  running = true;
-  document.getElementById('runBulkBtn').disabled = true;
-  document.getElementById('exportBtn').style.display = 'none';
+  // Build from AI using sample of product names
+  document.getElementById('pdf-status-box').style.display='block';
+  setPdfStep('pstep-tax','active');
+  try {
+    const sample = bulkRows.slice(0,5).map(r=>getName(r)).join('\n');
+    const attrs = await buildTaxonomy(cat||'auto', sample);
+    currentAttrs = attrs;
+    setPdfStep('pstep-tax','done');
+    setPdfStep('pstep-load','done');
+    showTaxonomyProposal(cat||'Auto-detected', attrs, false);
+  } catch(e){
+    setPdfStep('pstep-tax','error');
+    alert('Could not build taxonomy: '+e.message);
+  }
+}
 
-  const total = bulkRows.length;
-  let done = 0;
-  let errors = 0;
+function showTaxonomyProposal(cat, attrs, fromKB){
+  currentCat = cat;
+  renderAttrTags(attrs);
+  document.getElementById('tax-prop-cat').textContent = cat + (fromKB?' (from knowledge base)':'');
+  document.getElementById('tax-proposal-box').style.display='block';
+}
 
-  for (let i = 0; i < total; i++) {
-    if (bulkResults[i].status === 'done') { done++; continue; }
-    bulkResults[i].status = 'running';
+// ── PDF processing ─────────────────────────────────────────────────────────────
+if(typeof pdfjsLib!=='undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+function setPdfStep(id,state){
+  const el=document.getElementById(id); if(!el) return;
+  el.className='pdf-step '+state;
+  const icon=el.querySelector('.pdf-step-icon');
+  if(icon) icon.textContent=state==='done'?'✓':state==='active'?'►':state==='error'?'✕':'○';
+}
+
+async function processPdfFile(file){
+  if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
+  if(!apiKey){
+    document.getElementById('bulk-summary').textContent='⚠ No API key — paste key in header and click Save key.';
+    document.getElementById('bulk-controls').style.display='block';
+    return;
+  }
+  document.getElementById('pdf-status-box').style.display='block';
+  setPdfStep('pstep-extract','active');
+  setPdfStep('pstep-tax','');
+  setPdfStep('pstep-parse','');
+  setPdfStep('pstep-load','');
+
+  try {
+    // Extract text
+    const reader = new FileReader();
+    const arrayBuf = await new Promise((res,rej)=>{ reader.onload=e=>res(e.target.result); reader.onerror=rej; reader.readAsArrayBuffer(file); });
+    const pdf = await pdfjsLib.getDocument({data:new Uint8Array(arrayBuf)}).promise;
+    let fullText='';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      fullText+=content.items.map(item=>item.str).join(' ')+'\n\n';
+    }
+    pdfRawText = fullText.trim();
+    if(!pdfRawText||pdfRawText.length<20){ setPdfStep('pstep-extract','error'); throw new Error('Could not extract text. PDF may be scanned/image-based.'); }
+    setPdfStep('pstep-extract','done');
+
+    // Build taxonomy
+    setPdfStep('pstep-tax','active');
+    const cat = document.getElementById('b-category').value.trim();
+    currentCat = cat;
+    const existing = cat ? getKBTaxonomy(cat) : null;
+    if(existing){
+      currentAttrs=existing;
+      setPdfStep('pstep-tax','done');
+    } else {
+      const sample = pdfRawText.substring(0,800);
+      const attrs = await buildTaxonomy(cat||'auto', sample);
+      currentAttrs = attrs;
+      setPdfStep('pstep-tax','done');
+    }
+
+    // Parse chunk 1
+    setPdfStep('pstep-parse','active');
+    pdfChunks=[];
+    for(let i=0;i<pdfRawText.length;i+=4000) pdfChunks.push(pdfRawText.substring(i,i+4000));
+    pdfChunkIdx=0; pdfAllProducts=[];
+
+    const products = await parsePdfChunk(pdfChunks[0]);
+    pdfChunkIdx=1;
+    pdfAllProducts = products||[];
+    setPdfStep('pstep-parse','done');
+
+    // Load rows
+    setPdfStep('pstep-load','active');
+    bulkRows = pdfAllProducts.map(p=>({part_number:p.part_number||'',product_name:p.product_name||'',_size:p.size||''})).filter(r=>r.product_name);
+    bulkResults = bulkRows.map(()=>({status:'pending',result:null}));
+    setPdfStep('pstep-load','done');
+
+    // Show taxonomy proposal
+    showTaxonomyProposal(cat||'Auto-detected', currentAttrs, !!existing);
+
+    const remaining = pdfChunks.length - pdfChunkIdx;
+    let summary = `${bulkRows.length} products from chunk 1 of ${pdfChunks.length}`;
+    if(remaining>0) summary+=` &nbsp;<button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="processNextChunk()">Load chunk 2 of ${pdfChunks.length}</button>`;
+    document.getElementById('bulk-summary').innerHTML=summary;
+
+  } catch(err){
+    console.error('PDF error:',err);
+    ['pstep-extract','pstep-tax','pstep-parse','pstep-load'].forEach(id=>{
+      if(document.getElementById(id).classList.contains('active')) setPdfStep(id,'error');
+    });
+    document.getElementById('bulk-controls').style.display='block';
+    document.getElementById('bulk-summary').textContent='⚠ '+err.message;
+  }
+}
+
+async function parsePdfChunk(text){
+  const mode = document.querySelector('input[name="pdf-mode"]:checked')?.value||'individual';
+  const modeInstr = {
+    individual:`Extract ONLY individual single items — one size, one stock number per row. Do NOT extract sets/kits with quantities.`,
+    sets:`Extract ONLY sets/kits — products with a quantity and size range. Do NOT extract single individual items.`,
+    both:`Extract ALL products — both individual items and sets/kits.`
+  };
+  const system=`You are a product data extraction engine for an industrial tools catalog.
+${modeInstr[mode]}
+
+For each product:
+- part_number: stock/item number (e.g. BBML74201). Look carefully — it may be at end of line.
+- product_name: full description including type, size, specs
+- size: the size value (e.g. "1/16", "3/8 inch", "M6", "1/16 - 1/4 by 64ths for sets)
+
+CRITICAL:
+- Stock numbers follow a pattern (letters+numbers like BBML74201, DRL-001). Each one is a product.
+- Sizes are often fractional: 1/16, 5/64, 3/32, 1/8, etc.
+- Table columns in PDF appear space-separated — piece them together per row.
+- Return ONLY valid JSON array. Empty array if nothing found.
+
+Output: [{"part_number":"BBML74201","product_name":"Drill Bit 1/16 Flute 7/8 Overall 1-7/8","size":"1/16"},...]`;
+  const raw=await callClaude(system,`Extract products (${mode}):\n\n${text}`,4000);
+  try{ return JSON.parse(raw); }
+  catch(e){
+    const lastBracket=raw.lastIndexOf('},');
+    if(lastBracket>0){ try{ return JSON.parse(raw.substring(0,lastBracket+1)+']'); }catch(e2){} }
+    const lastClose=raw.lastIndexOf('}');
+    if(lastClose>0){ try{ const a=raw.substring(0,lastClose+1); return JSON.parse(a.startsWith('[')?a+']':'['+a+']'); }catch(e3){} }
+    throw new Error('Could not parse products from this chunk.');
+  }
+}
+
+async function processNextChunk(){
+  if(!pdfChunks.length||pdfChunkIdx>=pdfChunks.length) return;
+  if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
+  const idx=pdfChunkIdx, total=pdfChunks.length;
+  document.getElementById('bulk-summary').textContent=`Processing chunk ${idx+1} of ${total}...`;
+  document.getElementById('pdf-status-box').style.display='block';
+  setPdfStep('pstep-extract','done');
+  setPdfStep('pstep-tax','done');
+  const label=document.getElementById('pstep-parse');
+  if(label) label.innerHTML=`<span class="pdf-step-icon">►</span> Parsing chunk ${idx+1} of ${total}`;
+  label.className='pdf-step active';
+  try {
+    const newProds=await parsePdfChunk(pdfChunks[idx]);
+    pdfChunkIdx++;
+    if(newProds&&newProds.length) pdfAllProducts.push(...newProds);
+    const addedRows=(newProds||[]).map(p=>({part_number:p.part_number||'',product_name:p.product_name||'',_size:p.size||''})).filter(r=>r.product_name);
+    bulkRows.push(...addedRows);
+    addedRows.forEach(()=>bulkResults.push({status:'pending',result:null}));
+    renderBulkTable();
+    setPdfStep('pstep-parse','done');
+    setPdfStep('pstep-load','done');
+    const remaining=pdfChunks.length-pdfChunkIdx;
+    let summary=`${bulkRows.length} total products — chunk ${pdfChunkIdx} of ${total} loaded`;
+    if(remaining>0) summary+=` &nbsp;<button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="processNextChunk()">Load chunk ${pdfChunkIdx+1} of ${total}</button>`;
+    else summary+=' — all chunks loaded';
+    document.getElementById('bulk-summary').innerHTML=summary;
+  } catch(err){
+    document.getElementById('bulk-summary').textContent='Error on chunk '+(idx+1)+': '+err.message;
+    setPdfStep('pstep-parse','error');
+  }
+}
+
+// ── Bulk table ────────────────────────────────────────────────────────────────
+function buildBulkTableHeaders(){
+  const fixedCols=['#','Part number','Product name','Status','Category','Confidence'];
+  const attrCols = currentAttrs;
+  const allCols = [...fixedCols, ...attrCols];
+  document.getElementById('bulk-thead').innerHTML = allCols.map(c=>`<th>${c}</th>`).join('');
+}
+
+function getName(row){ return row.product_name||row.name||row.description||row.product_description||''; }
+function getPartNum(row){ return row.part_number||row.sku||row.item_number||row.partnum||''; }
+
+function buildRowHTML(row, i){
+  const r=bulkResults[i];
+  const dotClass={pending:'dot-pending',running:'dot-running',done:'dot-done',error:'dot-error'}[r.status]||'dot-pending';
+  const res=r.result, a=res?.attributes||{};
+  const attrCells=currentAttrs.map(k=>`<td title="${a[k]||''}">${a[k]||''}</td>`).join('');
+  return `<tr id="brow-${i}">
+    <td style="color:var(--muted)">${i+1}</td>
+    <td title="${getPartNum(row)}">${getPartNum(row)||'—'}</td>
+    <td title="${getName(row)}">${getName(row).substring(0,45)}${getName(row).length>45?'...':''}</td>
+    <td><div class="status-cell"><div class="dot ${dotClass}"></div><span style="color:var(--muted)">${r.status}</span></div></td>
+    <td>${res?.category||''}</td>
+    <td>${res?.confidence||''}</td>
+    ${attrCells}
+  </tr>`;
+}
+
+function renderBulkTable(){
+  buildBulkTableHeaders();
+  document.getElementById('bulkBody').innerHTML=bulkRows.map((row,i)=>buildRowHTML(row,i)).join('');
+}
+
+function updateRow(i){
+  const tr=document.getElementById('brow-'+i);
+  if(tr) tr.outerHTML=buildRowHTML(bulkRows[i],i);
+}
+
+// ── Run bulk classification ────────────────────────────────────────────────────
+async function runBulk(){
+  if(running) return;
+  if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
+  if(!apiKey){ alert('Enter your Anthropic API key in the header first.'); return; }
+  running=true;
+  document.getElementById('runBulkBtn').disabled=true;
+  document.getElementById('exportBtn').style.display='none';
+  const total=bulkRows.length;
+  let done=0, errors=0;
+  const system=buildSystemPrompt(currentCat, currentAttrs);
+  for(let i=0;i<total;i++){
+    if(bulkResults[i].status==='done'){ done++; continue; }
+    bulkResults[i].status='running';
     updateRow(i);
-    document.getElementById('prog-label').textContent = `Processing ${i+1} of ${total}...`;
-    document.getElementById('prog-count').textContent = `${done} done · ${errors} errors`;
-    document.getElementById('progFill').style.width = ((i / total) * 100).toFixed(1) + '%';
-
+    document.getElementById('prog-label').textContent=`Processing ${i+1} of ${total}...`;
+    document.getElementById('prog-count').textContent=`${done} done · ${errors} errors`;
+    document.getElementById('progFill').style.width=((i/total)*100).toFixed(1)+'%';
     try {
-      const res = await callAPI(getPartNum(bulkRows[i]), getName(bulkRows[i]));
-      bulkResults[i] = { status: 'done', result: res };
+      const sizeHint = bulkRows[i]._size||extractSizeFromPartNum(getPartNum(bulkRows[i]));
+      const msg=`Part Number: ${getPartNum(bulkRows[i])||'n/a'}\nProduct: ${sizeHint?`[Size: ${sizeHint}] `:''}${getName(bulkRows[i])}`;
+      const raw=await callClaude(system, msg, 800);
+      bulkResults[i]={status:'done',result:JSON.parse(raw)};
       done++;
-    } catch(e) {
-      bulkResults[i] = { status: 'error', result: null, error: e.message };
+    } catch(e){
+      bulkResults[i]={status:'error',result:null,error:e.message};
       errors++;
     }
     updateRow(i);
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r=>setTimeout(r,300));
   }
-
-  document.getElementById('progFill').style.width = '100%';
-  document.getElementById('prog-label').textContent = 'Complete';
-  document.getElementById('prog-count').textContent = `${done} done · ${errors} errors`;
-  document.getElementById('bulk-summary').textContent = `${done}/${total} classified · ${errors} errors`;
-  document.getElementById('exportBtn').style.display = '';
-  document.getElementById('runBulkBtn').disabled = false;
-  running = false;
+  document.getElementById('progFill').style.width='100%';
+  document.getElementById('prog-label').textContent='Complete';
+  document.getElementById('prog-count').textContent=`${done} done · ${errors} errors`;
+  document.getElementById('bulk-summary').textContent=`${done}/${total} classified · ${errors} errors`;
+  document.getElementById('exportBtn').style.display='';
+  document.getElementById('runBulkBtn').disabled=false;
+  running=false;
 }
 
-function exportResults() {
-  const headers = ['part_number','product_name','category','confidence','Size','Type','Material','Point-Angle','Finish','Flutes','Grind Limits','Cut Type','Shape','TPI','Chamfer','reasoning'];
-  const data = bulkRows.map((row, i) => {
-    const r = bulkResults[i];
-    const res = r.result;
-    const a = res?.attributes || {};
-    return [
-      getPartNum(row), getName(row),
-      res?.category || '', res?.confidence || '',
-      a.Size||'', a.Type||'', a.Material||'', a['Point-Angle']||'',
-      a.Finish||'', a.Flutes||'', a['Grind Limits']||'', a['Cut Type']||'',
-      a.Shape||'', a.TPI||'', a.Chamfer||'',
-      res?.reasoning||''
-    ];
+// ── Export ────────────────────────────────────────────────────────────────────
+function exportResults(){
+  const fixedHeaders=['part_number','product_name','category','confidence','reasoning'];
+  const headers=[...fixedHeaders,...currentAttrs];
+  const data=bulkRows.map((row,i)=>{
+    const r=bulkResults[i],res=r.result,a=res?.attributes||{};
+    return[getPartNum(row),getName(row),res?.category||'',res?.confidence||'',res?.reasoning||'',...currentAttrs.map(k=>a[k]||'')];
   });
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-  ws['!cols'] = headers.map(() => ({ wch: 18 }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Classified Products');
-  XLSX.writeFile(wb, 'taxoai_results.xlsx');
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([headers,...data]);
+  ws['!cols']=headers.map(()=>({wch:20}));
+  XLSX.utils.book_append_sheet(wb,ws,'Classified Products');
+  XLSX.writeFile(wb,`taxoai_${currentCat||'results'}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
-function downloadTemplate() {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
+function downloadTemplate(){
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
     ['part_number','product_name','category'],
-    ['DRL-HSS-3/8-JL','3/8" High Speed Steel Jobber Length Drill Bit 118 Degree','Drill Bits'],
-    ['TAP-M6-SPT','M6 x 1.0 Spiral Point Tap High Speed Steel','Taps'],
+    ['BBML74201','1/16 Drill Bit HSS Jobber Length','Drill Bits'],
+    ['','M6 x 1.0 Spiral Point Tap HSS','Taps'],
     ['','','']
   ]);
-  ws['!cols'] = [{ wch: 20 }, { wch: 50 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Import Template');
-  XLSX.writeFile(wb, 'taxoai_import_template.xlsx');
+  ws['!cols']=[{wch:20},{wch:50},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'Import Template');
+  XLSX.writeFile(wb,'taxoai_template.xlsx');
 }
 
-function resetBulk() {
-  bulkRows = [];
-  bulkResults = [];
-  document.getElementById('bulk-controls').style.display = 'none';
-  document.getElementById('fileInput').value = '';
-  document.getElementById('bulkBody').innerHTML = '';
-  document.getElementById('progFill').style.width = '0%';
-  document.getElementById('prog-label').textContent = 'Ready';
-  document.getElementById('prog-count').textContent = '';
-  document.getElementById('exportBtn').style.display = 'none';
-  running = false;
+function resetBulk(){
+  bulkRows=[]; bulkResults=[]; running=false; currentAttrs=[]; pdfChunks=[]; pdfChunkIdx=0; pdfAllProducts=[];
+  document.getElementById('bulk-controls').style.display='none';
+  document.getElementById('pdf-status-box').style.display='none';
+  document.getElementById('tax-proposal-box').style.display='none';
+  document.getElementById('fileInput').value='';
+  document.getElementById('bulkBody').innerHTML='';
+  document.getElementById('progFill').style.width='0%';
+  document.getElementById('prog-label').textContent='Ready';
+  document.getElementById('prog-count').textContent='';
+  document.getElementById('exportBtn').style.display='none';
 }
 
-// Taxonomy viewer
-function renderTaxonomy() {
-  const grid = document.getElementById('taxonomyGrid');
-  grid.innerHTML = Object.entries(TAXONOMY).map(([cat, data]) => {
-    const typesPills = data.types.map(t => `<span class="pill">${t}</span>`).join('');
-    const attrRows = data.extra_attrs.map(a => `<div class="tax-row"><span class="tax-key">${a}</span><span class="tax-vals" style="color:var(--muted);font-size:10px;font-family:var(--mono);">extracted by AI</span></div>`).join('');
-    return `<div class="tax-card">
-      <div class="tax-card-header">${cat}<span style="color:var(--muted);font-size:10px;">${data.size_attr}</span></div>
-      <div class="tax-card-body">
-        <div class="tax-row" style="padding-bottom:8px;">
-          <span class="tax-key" style="margin-bottom:4px;">Types</span>
-          <div>${typesPills || '<span style="color:var(--muted);font-size:10px;font-family:var(--mono);">shape-based</span>'}</div>
-        </div>
-        ${attrRows}
-      </div>
-    </div>`;
-  }).join('');
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name){
+  const tabs=['single','bulk','kb'];
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  const idx=tabs.indexOf(name);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='kb') renderKB();
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.onload=()=>{
+  if(apiKey){
+    document.getElementById('apiKeyInput').value=apiKey;
+    document.getElementById('apiStatus').textContent='key saved';
+    document.getElementById('apiStatus').className='api-status ok';
+  }
+  renderKB();
+  populateCatDatalist();
+};
 </script>
 </body>
 </html>
