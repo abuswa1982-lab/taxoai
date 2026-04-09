@@ -215,11 +215,34 @@ input[type=file]{display:none}
       </div>
     </div>
 
+    <!-- Page range selector — shows after PDF is loaded -->
+    <div id="page-range-box" style="display:none;background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:1.25rem;margin-bottom:1rem">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+        PDF loaded — <span id="pdf-page-count"></span> &nbsp;·&nbsp; Select pages to extract
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+        <div class="field" style="margin:0;width:100px">
+          <label>From page</label>
+          <input type="number" id="page-from" min="1" value="1" style="padding:8px 10px"/>
+        </div>
+        <div class="field" style="margin:0;width:100px">
+          <label>To page</label>
+          <input type="number" id="page-to" min="1" value="5" style="padding:8px 10px"/>
+        </div>
+        <button class="bulk-btn primary" onclick="extractPageRange()">Extract pages</button>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--muted);align-self:center">After extracting, load more pages anytime</span>
+      </div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--muted)">
+        Tip: Skip cover pages, indexes, and legal pages. Go straight to the product tables.
+      </div>
+    </div>
+
     <!-- PDF status -->
     <div id="pdf-status-box" style="display:none">
       <div class="pdf-status">
         <div class="pdf-status-title">PDF processing</div>
-        <div class="pdf-step" id="pstep-extract"><span class="pdf-step-icon">○</span> Extracting text from PDF</div>
+        <div class="pdf-step" id="pstep-extract"><span class="pdf-step-icon">○</span> Reading PDF pages</div>
+        <div class="pdf-step" id="pstep-ocr"><span class="pdf-step-icon">○</span> OCR — converting scanned pages to text</div>
         <div class="pdf-step" id="pstep-tax"><span class="pdf-step-icon">○</span> Building taxonomy</div>
         <div class="pdf-step" id="pstep-parse"><span class="pdf-step-icon">○</span> Parsing product rows with AI</div>
         <div class="pdf-step" id="pstep-load"><span class="pdf-step-icon">○</span> Loading into classifier</div>
@@ -562,6 +585,7 @@ function processFile(file){
   document.getElementById('pdf-status-box').style.display='none';
   document.getElementById('tax-proposal-box').style.display='none';
   document.getElementById('bulk-controls').style.display='none';
+  document.getElementById('page-range-box').style.display='none';
   if(file.name.toLowerCase().endsWith('.pdf')){
     processPdfFile(file);
     return;
@@ -636,6 +660,9 @@ function setPdfStep(id,state){
   if(icon) icon.textContent=state==='done'?'✓':state==='active'?'►':state==='error'?'✕':'○';
 }
 
+// ── PDF global state ──────────────────────────────────────────────────────────
+let pdfDoc = null;  // holds loaded PDF document
+
 async function processPdfFile(file){
   if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
   if(!apiKey){
@@ -643,26 +670,70 @@ async function processPdfFile(file){
     document.getElementById('bulk-controls').style.display='block';
     return;
   }
-  document.getElementById('pdf-status-box').style.display='block';
-  setPdfStep('pstep-extract','active');
-  setPdfStep('pstep-tax','');
-  setPdfStep('pstep-parse','');
-  setPdfStep('pstep-load','');
-
   try {
-    // Extract text
+    setPdfStep('pstep-extract','active');
+    document.getElementById('pdf-status-box').style.display='block';
     const reader = new FileReader();
     const arrayBuf = await new Promise((res,rej)=>{ reader.onload=e=>res(e.target.result); reader.onerror=rej; reader.readAsArrayBuffer(file); });
-    const pdf = await pdfjsLib.getDocument({data:new Uint8Array(arrayBuf)}).promise;
-    let fullText='';
-    for(let i=1;i<=pdf.numPages;i++){
-      const page=await pdf.getPage(i);
-      const content=await page.getTextContent();
-      fullText+=content.items.map(item=>item.str).join(' ')+'\n\n';
-    }
-    pdfRawText = fullText.trim();
-    if(!pdfRawText||pdfRawText.length<20){ setPdfStep('pstep-extract','error'); throw new Error('Could not extract text. PDF may be scanned/image-based.'); }
+    pdfDoc = await pdfjsLib.getDocument({data:new Uint8Array(arrayBuf)}).promise;
+    const numPages = pdfDoc.numPages;
     setPdfStep('pstep-extract','done');
+    document.getElementById('pdf-status-box').style.display='none';
+
+    // Show page range selector
+    document.getElementById('pdf-page-count').textContent = numPages + ' pages total';
+    document.getElementById('page-to').value = Math.min(5, numPages);
+    document.getElementById('page-to').max = numPages;
+    document.getElementById('page-from').max = numPages;
+    document.getElementById('page-range-box').style.display='block';
+  } catch(err){
+    setPdfStep('pstep-extract','error');
+    document.getElementById('bulk-controls').style.display='block';
+    document.getElementById('bulk-summary').textContent='⚠ Could not load PDF: '+err.message;
+  }
+}
+
+async function extractPageRange(){
+  if(!pdfDoc){ alert('No PDF loaded.'); return; }
+  if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
+  if(!apiKey){ alert('No API key — paste key in header and click Save key.'); return; }
+
+  const fromPage = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
+  const toPage   = Math.min(pdfDoc.numPages, parseInt(document.getElementById('page-to').value)||5);
+  if(fromPage>toPage){ alert('From page must be less than or equal to To page.'); return; }
+
+  document.getElementById('pdf-status-box').style.display='block';
+  ['pstep-extract','pstep-ocr','pstep-tax','pstep-parse','pstep-load'].forEach(id=>setPdfStep(id,''));
+  setPdfStep('pstep-extract','active');
+
+  try {
+    // Try text extraction first on selected pages
+    let extractedText = '';
+    for(let p=fromPage; p<=toPage; p++){
+      const page = await pdfDoc.getPage(p);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item=>item.str).join(' ');
+      extractedText += pageText + '
+
+';
+    }
+    extractedText = extractedText.trim();
+    setPdfStep('pstep-extract','done');
+
+    // If text extraction got nothing useful — run OCR
+    if(!extractedText || extractedText.replace(/\s/g,'').length < 50){
+      setPdfStep('pstep-ocr','active');
+      extractedText = await ocrPages(fromPage, toPage);
+      setPdfStep('pstep-ocr','done');
+    } else {
+      setPdfStep('pstep-ocr','done');
+    }
+
+    if(!extractedText || extractedText.length < 20){
+      throw new Error('Could not extract text from pages '+fromPage+'-'+toPage+'. Try different pages.');
+    }
+
+    pdfRawText = extractedText;
 
     // Build taxonomy
     setPdfStep('pstep-tax','active');
@@ -670,16 +741,15 @@ async function processPdfFile(file){
     currentCat = cat;
     const existing = cat ? getKBTaxonomy(cat) : null;
     if(existing){
-      currentAttrs=existing;
-      setPdfStep('pstep-tax','done');
+      currentAttrs = existing;
     } else {
       const sample = pdfRawText.substring(0,800);
       const attrs = await buildTaxonomy(cat||'auto', sample);
       currentAttrs = attrs;
-      setPdfStep('pstep-tax','done');
     }
+    setPdfStep('pstep-tax','done');
 
-    // Parse chunk 1
+    // Parse products
     setPdfStep('pstep-parse','active');
     pdfChunks=[];
     for(let i=0;i<pdfRawText.length;i+=4000) pdfChunks.push(pdfRawText.substring(i,i+4000));
@@ -690,28 +760,74 @@ async function processPdfFile(file){
     pdfAllProducts = products||[];
     setPdfStep('pstep-parse','done');
 
-    // Load rows
+    // Load rows — append to existing if any
     setPdfStep('pstep-load','active');
-    bulkRows = pdfAllProducts.map(p=>({part_number:p.part_number||'',product_name:p.product_name||'',_size:p.size||''})).filter(r=>r.product_name);
-    bulkResults = bulkRows.map(()=>({status:'pending',result:null}));
+    const newRows = pdfAllProducts.map(p=>({part_number:p.part_number||'',product_name:p.product_name||'',_size:p.size||''})).filter(r=>r.product_name);
+    newRows.forEach(r=>{ bulkRows.push(r); bulkResults.push({status:'pending',result:null}); });
     setPdfStep('pstep-load','done');
 
-    // Show taxonomy proposal
-    showTaxonomyProposal(cat||'Auto-detected', currentAttrs, !!existing);
+    // Show taxonomy proposal if first batch
+    if(bulkRows.length === newRows.length){
+      showTaxonomyProposal(cat||'Auto-detected', currentAttrs, !!existing);
+    }
+
+    buildBulkTableHeaders();
+    renderBulkTable();
+    document.getElementById('bulk-controls').style.display='block';
 
     const remaining = pdfChunks.length - pdfChunkIdx;
-    let summary = `${bulkRows.length} products from chunk 1 of ${pdfChunks.length}`;
-    if(remaining>0) summary+=` &nbsp;<button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="processNextChunk()">Load chunk 2 of ${pdfChunks.length}</button>`;
-    document.getElementById('bulk-summary').innerHTML=summary;
+    let summary = `Pages ${fromPage}–${toPage}: ${newRows.length} products found (${bulkRows.length} total)`;
+    if(remaining>0) summary += ` &nbsp;<button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="processNextChunk()">Load more from these pages (chunk ${pdfChunkIdx+1}/${pdfChunks.length})</button>`;
+    document.getElementById('bulk-summary').innerHTML = summary;
 
   } catch(err){
-    console.error('PDF error:',err);
-    ['pstep-extract','pstep-tax','pstep-parse','pstep-load'].forEach(id=>{
+    console.error('Extract error:',err);
+    ['pstep-extract','pstep-ocr','pstep-tax','pstep-parse','pstep-load'].forEach(id=>{
       if(document.getElementById(id).classList.contains('active')) setPdfStep(id,'error');
     });
     document.getElementById('bulk-controls').style.display='block';
     document.getElementById('bulk-summary').textContent='⚠ '+err.message;
   }
+}
+
+async function ocrPages(fromPage, toPage){
+  // Render each page to canvas and send to OCR.space (free OCR API)
+  let allText = '';
+  for(let p=fromPage; p<=toPage; p++){
+    const page = await pdfDoc.getPage(p);
+    const viewport = page.getViewport({scale:2.0});  // 2x scale for better OCR accuracy
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({canvasContext:ctx, viewport}).promise;
+    const dataUrl = canvas.toDataURL('image/png');
+    // Remove data:image/png;base64, prefix
+    const base64 = dataUrl.split(',')[1];
+    try {
+      const formData = new FormData();
+      formData.append('base64Image', 'data:image/png;base64,' + base64);
+      formData.append('language', 'eng');
+      formData.append('isOverlayRequired', 'false');
+      formData.append('detectOrientation', 'true');
+      formData.append('scale', 'true');
+      formData.append('OCREngine', '2');  // Engine 2 better for tables
+      const res = await fetch('https://api.ocr.space/parse/image', {
+        method:'POST',
+        headers:{'apikey':'helloworld'},  // free public key
+        body: formData
+      });
+      const data = await res.json();
+      if(data.ParsedResults && data.ParsedResults[0]){
+        allText += data.ParsedResults[0].ParsedText + '
+
+';
+      }
+    } catch(ocrErr){
+      console.warn('OCR failed for page',p,ocrErr);
+    }
+  }
+  return allText.trim();
 }
 
 async function parsePdfChunk(text){
@@ -889,7 +1005,9 @@ function resetBulk(){
   document.getElementById('bulk-controls').style.display='none';
   document.getElementById('pdf-status-box').style.display='none';
   document.getElementById('tax-proposal-box').style.display='none';
+  document.getElementById('page-range-box').style.display='none';
   document.getElementById('fileInput').value='';
+  pdfDoc=null;
   document.getElementById('bulkBody').innerHTML='';
   document.getElementById('progFill').style.width='0%';
   document.getElementById('prog-label').textContent='Ready';
