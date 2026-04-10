@@ -215,25 +215,44 @@ input[type=file]{display:none}
       </div>
     </div>
 
-    <!-- Page range selector — shows after PDF is loaded -->
+    <!-- Page range queue — shows after PDF is loaded -->
     <div id="page-range-box" style="display:none;background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:1.25rem;margin-bottom:1rem">
-      <div style="font-family:var(--mono);font-size:11px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-        PDF loaded — <span id="pdf-page-count"></span> &nbsp;·&nbsp; Select pages to extract
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em">PDF loaded — <span id="pdf-page-count"></span></span>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--muted)">Add ranges to the queue, then run all at once</span>
       </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
-        <div class="field" style="margin:0;width:100px">
-          <label>From page</label>
-          <input type="number" id="page-from" min="1" value="1" style="padding:8px 10px"/>
+
+      <!-- Add to queue row -->
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;flex-wrap:wrap">
+        <div class="field" style="margin:0">
+          <label>Quick select</label>
+          <select id="page-range-select" style="width:160px" onchange="onPageRangeSelect()"></select>
         </div>
-        <div class="field" style="margin:0;width:100px">
-          <label>To page</label>
-          <input type="number" id="page-to" min="1" value="5" style="padding:8px 10px"/>
+        <div style="display:flex;gap:6px;align-items:center;padding-bottom:1px">
+          <div class="field" style="margin:0">
+            <label>From</label>
+            <input type="number" id="page-from" min="1" value="1" style="padding:8px 10px;width:70px"/>
+          </div>
+          <span style="color:var(--muted);font-family:var(--mono);font-size:12px;padding-top:20px">to</span>
+          <div class="field" style="margin:0">
+            <label>To</label>
+            <input type="number" id="page-to" min="1" value="1" style="padding:8px 10px;width:70px"/>
+          </div>
         </div>
-        <button class="bulk-btn primary" onclick="extractPageRange()">Extract pages</button>
-        <span style="font-size:11px;font-family:var(--mono);color:var(--muted);align-self:center">After extracting, load more pages anytime</span>
+        <button class="bulk-btn" style="align-self:flex-end" onclick="addToQueue()">+ Add to queue</button>
       </div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--muted)">
-        Tip: Skip cover pages, indexes, and legal pages. Go straight to the product tables.
+
+      <!-- Queue list -->
+      <div id="page-queue-list" style="margin-bottom:12px;display:none">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Queue</div>
+        <div id="queue-items" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      </div>
+
+      <!-- Run queue button -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="bulk-btn primary" id="run-queue-btn" onclick="runQueue()" style="display:none">Run queue</button>
+        <button class="bulk-btn" onclick="addToQueue(true)" style="display:none" id="run-single-btn">Extract these pages now</button>
+        <span id="queue-status" style="font-size:11px;font-family:var(--mono);color:var(--muted)">Add a page range above</span>
       </div>
     </div>
 
@@ -430,10 +449,14 @@ async function buildTaxonomy(cat, sampleText){
 Given a product category name and optional sample product text, return the optimal list of filter attributes for that category.
 Rules:
 - Return 6-14 attributes that buyers would use to filter/search this product type
-- Attributes should be specific and useful (Size, Material, Finish, Rating, Color, etc.)
-- Include "Size" if applicable — it is always the most important filter
+- Attributes should be specific and useful — think like a buyer filtering a catalog
+- ALWAYS include "Size" — it is the most critical filter for almost every industrial product
+- For drill bits include: Size, Decimal, Type, Material, Point Angle, Finish, Cut Type, Shank, Flute Length, Overall Length, Coating
+- For taps include: Size, TPI, Material, Chamfer, Cut Type, Finish, Thread Form
+- For safety equipment include: Size, Material, Rating/Standard, Color, Application
+- For general tools include: Size, Material, Finish, Drive Type, Application
 - Return ONLY a JSON array of attribute name strings, no explanation
-Example: ["Size","Material","Type","Finish","Point Angle","Flutes","Cut Type","Coating"]`;
+Example: ["Size","Decimal","Material","Finish","Point Angle","Cut Type","Shank","Coating"]`;
   const userMsg = `Category: ${cat}\nSample products:\n${sampleText||'(none provided)'}`;
   const raw = await callClaude(system, userMsg, 500);
   return JSON.parse(raw);
@@ -496,8 +519,14 @@ Required attributes to extract: ${attrs.join(', ')}
 
 Rules:
 - Extract ONLY attributes that are clearly determinable from the input. Return null for unknown.
-- Size: extract the measurement with unit exactly. If size is in part number (e.g. "3/8" in BBML74201) or in a [Size: X] hint, use it.
-- If input has [Size: X] prefix, that IS the Size value.
+- The input may already contain pre-extracted fields like [Size: X], material, finish, point_angle — use them directly.
+- Size: extract the measurement with unit exactly. If size is in part number or in a [Size: X] hint, use it.
+- Type: the drill/tool type — Mechanic's Length, Jobber Length, Taper Length, Screw Machine, etc. This comes from the product_name field. NEVER put the brand name here.
+- Material: look for HSS, M-2, M-7, M-42, Carbide, Cobalt, Carbon Steel, Molybdenum mentions.
+- Finish: look for Black Oxide, Gold, Silver, Bright, TiN, Nitride, Bronze mentions.
+- Point Angle: look for 118, 135, split point mentions — extract just the number like "135" or "118".
+- Cut Type: look for Heavy Duty, Standard, Extra Heavy Duty mentions.
+- If a field is already provided in the input as a key:value pair, use it directly — no need to infer.
 - confidence: "high" (most attrs clear), "medium" (some inferred), "low" (vague input).
 - reasoning: 1 sentence.
 
@@ -560,13 +589,10 @@ function renderSingleResult(r, attrs){
 // ── Size extraction from part number ─────────────────────────────────────────
 function extractSizeFromPartNum(pn){
   if(!pn) return '';
-  // Fractional: 3/8, 1/16, 7/64 etc
   const frac = pn.match(/\b(\d+\/\d+)\b/);
   if(frac) return frac[1];
-  // Decimal: 0.0625, .375
   const dec = pn.match(/\b(0?\.\d+)\b/);
   if(dec) return dec[1];
-  // Metric: M6, M10
   const met = pn.match(/\bM(\d+(?:\.\d+)?)\b/i);
   if(met) return met[0];
   return '';
@@ -607,7 +633,8 @@ function processFile(file){
       const data = XLSX.utils.sheet_to_json(ws,{defval:''});
       rows = data.map(r=>{ const n={}; Object.keys(r).forEach(k=>n[k.toLowerCase().replace(/\s+/g,'_')]=r[k]); return n; });
     }
-    bulkRows = rows.filter(r=>r.product_name||r.name||r.description||r.product_description);
+    bulkRows = rows.filter(r=>r.product_name||r.name||r.description||r.product_description)
+      .map(r=>({...r, _pre_extracted: false}));
     await initBulkWithTaxonomy();
   };
   if(file.name.endsWith('.csv')) reader.readAsText(file);
@@ -682,9 +709,41 @@ async function processPdfFile(file){
 
     // Show page range selector
     document.getElementById('pdf-page-count').textContent = numPages + ' pages total';
-    document.getElementById('page-to').value = Math.min(5, numPages);
     document.getElementById('page-to').max = numPages;
     document.getElementById('page-from').max = numPages;
+
+    // Build dropdown — individual pages + groups of 5
+    const sel = document.getElementById('page-range-select');
+    sel.innerHTML = '<option value="">— Pick a range —</option>';
+    // Individual pages first
+    for(let p=1; p<=numPages; p++){
+      const opt = document.createElement('option');
+      opt.value = p + ',' + p;
+      opt.textContent = `Page ${p}`;
+      sel.appendChild(opt);
+    }
+    // Divider
+    const div = document.createElement('option');
+    div.disabled = true;
+    div.textContent = '── Groups ──';
+    sel.appendChild(div);
+    // Groups of 5
+    for(let s=1; s<=numPages; s+=5){
+      const e = Math.min(s+4, numPages);
+      const opt = document.createElement('option');
+      opt.value = s + ',' + e;
+      opt.textContent = `Pages ${s} – ${e}`;
+      sel.appendChild(opt);
+    }
+    // Default to page 1
+    sel.selectedIndex = 1;
+    onPageRangeSelect();
+
+    // Show single extract button by default
+    document.getElementById('run-single-btn').style.display='block';
+    document.getElementById('queue-status').textContent='Add ranges to the queue or extract single range';
+    pageQueue = [];
+    renderQueue();
     document.getElementById('page-range-box').style.display='block';
   } catch(err){
     setPdfStep('pstep-extract','error');
@@ -693,14 +752,122 @@ async function processPdfFile(file){
   }
 }
 
-async function extractPageRange(){
+// ── Page queue ────────────────────────────────────────────────────────────────
+let pageQueue = [];  // [{from, to, status:'pending'|'done'|'running'|'error'}]
+
+function onPageRangeSelect(){
+  const sel = document.getElementById('page-range-select');
+  if(!sel.value) return;
+  const [from, to] = sel.value.split(',');
+  document.getElementById('page-from').value = from;
+  document.getElementById('page-to').value = to;
+}
+
+function addToQueue(runNow){
+  const from = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
+  const to   = Math.min(pdfDoc ? pdfDoc.numPages : 9999, parseInt(document.getElementById('page-to').value)||1);
+  if(from > to){ alert('From page must be <= To page.'); return; }
+
+  if(runNow){
+    // Run immediately without adding to queue
+    pageQueue = [{from, to, status:'pending'}];
+    runQueue();
+    return;
+  }
+
+  // Add to queue
+  pageQueue.push({from, to, status:'pending'});
+  renderQueue();
+
+  // Auto-advance selector to next range
+  const sel = document.getElementById('page-range-select');
+  for(let i=0; i<sel.options.length; i++){
+    if(sel.options[i].value === from+','+to){
+      if(i+1 < sel.options.length && sel.options[i+1].value){
+        sel.selectedIndex = i+1;
+        onPageRangeSelect();
+      }
+      break;
+    }
+  }
+}
+
+function removeFromQueue(idx){
+  pageQueue.splice(idx, 1);
+  renderQueue();
+}
+
+function renderQueue(){
+  const list = document.getElementById('page-queue-list');
+  const items = document.getElementById('queue-items');
+  const runBtn = document.getElementById('run-queue-btn');
+  const singleBtn = document.getElementById('run-single-btn');
+  const status = document.getElementById('queue-status');
+
+  const pending = pageQueue.filter(q=>q.status==='pending');
+
+  if(!pageQueue.length){
+    list.style.display='none';
+    runBtn.style.display='none';
+    singleBtn.style.display='block';
+    status.textContent='Add a page range above or extract single range now';
+    return;
+  }
+
+  list.style.display='block';
+  items.innerHTML = pageQueue.map((q,i) => {
+    const color = q.status==='done'?'var(--success)':q.status==='running'?'var(--accent)':q.status==='error'?'var(--danger)':'var(--accent2)';
+    const icon  = q.status==='done'?'✓':q.status==='running'?'►':q.status==='error'?'✕':'○';
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(108,99,255,.12);border:1px solid rgba(108,99,255,.3);border-radius:6px;padding:4px 10px;font-size:12px;font-family:var(--mono);color:${color}">
+      ${icon} Pages ${q.from}–${q.to}
+      ${q.status==='pending'?`<span onclick="removeFromQueue(${i})" style="cursor:pointer;color:var(--muted);margin-left:2px;font-size:13px">×</span>`:''}
+    </span>`;
+  }).join('');
+
+  if(pending.length > 0){
+    runBtn.style.display='block';
+    runBtn.textContent = `Run queue (${pending.length} range${pending.length>1?'s':''})`;
+    singleBtn.style.display='none';
+    status.textContent = `${pageQueue.length} range${pageQueue.length>1?'s':''} in queue — ${pending.length} pending`;
+  } else {
+    runBtn.style.display='none';
+    singleBtn.style.display='block';
+    status.textContent = 'All ranges processed';
+  }
+}
+
+async function runQueue(){
+  const pending = pageQueue.filter(q=>q.status==='pending');
+  if(!pending.length){ alert('No pending ranges in queue.'); return; }
+  document.getElementById('run-queue-btn').disabled = true;
+  for(let q of pending){
+    q.status = 'running';
+    renderQueue();
+    try {
+      await extractPageRange(q.from, q.to);
+      q.status = 'done';
+    } catch(err){
+      q.status = 'error';
+      console.error('Queue error for pages',q.from,'-',q.to,':',err);
+    }
+    renderQueue();
+  }
+  document.getElementById('run-queue-btn').disabled = false;
+  document.getElementById('queue-status').textContent = 'Queue complete — review results and export';
+}
+
+async function extractPageRange(fromPage, toPage){
   if(!pdfDoc){ alert('No PDF loaded.'); return; }
   if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
   if(!apiKey){ alert('No API key — paste key in header and click Save key.'); return; }
-
-  const fromPage = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
-  const toPage   = Math.min(pdfDoc.numPages, parseInt(document.getElementById('page-to').value)||5);
-  if(fromPage>toPage){ alert('From page must be less than or equal to To page.'); return; }
+  // If called without args (legacy), read from inputs
+  if(fromPage===undefined){
+    fromPage = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
+    toPage   = Math.min(pdfDoc.numPages, parseInt(document.getElementById('page-to').value)||1);
+  }
+  fromPage = Math.max(1, fromPage);
+  toPage   = Math.min(pdfDoc.numPages, toPage);
+  if(fromPage>toPage){ throw new Error('From page must be <= To page'); }
 
   document.getElementById('pdf-status-box').style.display='block';
   ['pstep-extract','pstep-ocr','pstep-tax','pstep-parse','pstep-load'].forEach(id=>setPdfStep(id,''));
@@ -713,9 +880,7 @@ async function extractPageRange(){
       const page = await pdfDoc.getPage(p);
       const content = await page.getTextContent();
       const pageText = content.items.map(item=>item.str).join(' ');
-      extractedText += pageText + '
-
-';
+      extractedText += pageText + '\n\n';
     }
     extractedText = extractedText.trim();
     setPdfStep('pstep-extract','done');
@@ -762,7 +927,23 @@ async function extractPageRange(){
 
     // Load rows — append to existing if any
     setPdfStep('pstep-load','active');
-    const newRows = pdfAllProducts.map(p=>({part_number:p.part_number||'',product_name:p.product_name||'',_size:p.size||''})).filter(r=>r.product_name);
+    const newRows = pdfAllProducts.map(p=>({
+      part_number: p.part_number||'',
+      product_name: p.product_name||'',
+      _size: p.size||'',
+      _type: p.type||p.product_name||'',
+      _decimal: p.decimal||'',
+      _flute_length: p.flute_length||'',
+      _overall_length: p.overall_length||'',
+      _material: p.material||'',
+      _finish: p.finish||'',
+      _point_angle: p.point_angle||'',
+      _cut_type: p.cut_type||'',
+      _shank: p.shank||'',
+      _coating: p.coating||'',
+      _qty: p.qty||'',
+      _pre_extracted: true
+    })).filter(r=>r.product_name);
     newRows.forEach(r=>{ bulkRows.push(r); bulkResults.push({status:'pending',result:null}); });
     setPdfStep('pstep-load','done');
 
@@ -779,6 +960,16 @@ async function extractPageRange(){
     let summary = `Pages ${fromPage}–${toPage}: ${newRows.length} products found (${bulkRows.length} total)`;
     if(remaining>0) summary += ` &nbsp;<button class="bulk-btn" style="padding:4px 10px;font-size:11px" onclick="processNextChunk()">Load more from these pages (chunk ${pdfChunkIdx+1}/${pdfChunks.length})</button>`;
     document.getElementById('bulk-summary').innerHTML = summary;
+
+    // Mark this range in dropdown
+    const sel2 = document.getElementById('page-range-select');
+    for(let i=0; i<sel2.options.length; i++){
+      if(sel2.options[i].value === fromPage+','+toPage){
+        sel2.options[i].textContent = sel2.options[i].textContent.replace(' ✓','') + ' ✓';
+        sel2.options[i].style.color = 'var(--success)';
+        break;
+      }
+    }
 
   } catch(err){
     console.error('Extract error:',err);
@@ -819,9 +1010,7 @@ async function ocrPages(fromPage, toPage){
       });
       const data = await res.json();
       if(data.ParsedResults && data.ParsedResults[0]){
-        allText += data.ParsedResults[0].ParsedText + '
-
-';
+        allText += data.ParsedResults[0].ParsedText + '\n\n';
       }
     } catch(ocrErr){
       console.warn('OCR failed for page',p,ocrErr);
@@ -840,18 +1029,40 @@ async function parsePdfChunk(text){
   const system=`You are a product data extraction engine for an industrial tools catalog.
 ${modeInstr[mode]}
 
-For each product:
-- part_number: stock/item number (e.g. BBML74201). Look carefully — it may be at end of line.
-- product_name: full description including type, size, specs
-- size: the size value (e.g. "1/16", "3/8 inch", "M6", "1/16 - 1/4 by 64ths for sets)
+CRITICAL UNDERSTANDING — HOW CATALOG PAGES WORK:
+Each page typically has TWO sections you must read TOGETHER:
+1. A DESCRIPTION BLOCK — found above OR below the table (varies by page). Contains shared attributes that apply to ALL products on that page: material, finish, point angle, cut type, coating, shank type, series name, etc.
+2. A TABLE — contains individual row data: size, decimal equivalent, flute length, overall length, stock number.
 
-CRITICAL:
-- Stock numbers follow a pattern (letters+numbers like BBML74201, DRL-001). Each one is a product.
-- Sizes are often fractional: 1/16, 5/64, 3/32, 1/8, etc.
-- Table columns in PDF appear space-separated — piece them together per row.
-- Return ONLY valid JSON array. Empty array if nothing found.
+YOUR JOB: Extract the description block attributes FIRST, then apply them to EVERY row in the table. Each product should have BOTH the table data AND the description attributes combined.
 
-Output: [{"part_number":"BBML74201","product_name":"Drill Bit 1/16 Flute 7/8 Overall 1-7/8","size":"1/16"},...]`;
+Example — if the description says "Premium M-7 HSS, 135° Split Point, Black Oxide & Gold Finish, Heavy Duty" and the table row says "1/16 | .0625 | 7/8 | 1-7/8 | BBML74201", then the product is:
+{"part_number":"BBML74201","product_name":"Blitz Bits Mechanic Length Drill Bit","size":"1/16","decimal":"0.0625","flute_length":"7/8","overall_length":"1-7/8","material":"M-7 Premium HSS","finish":"Black Oxide & Gold","point_angle":"135 Split Point","cut_type":"Heavy Duty","shank":"3-Flat"}
+
+EXTRACTION RULES:
+- part_number: stock/item number (letters+numbers pattern like BBML74201, BBN74501, BB74101)
+- product_name: the TOOL TYPE only — strip the brand name completely. Use only the type/style descriptor. If header says "Blitz Bits® - Mechanic's Length", use "Mechanic's Length". If "Blitz Nitride® - Jobber Drills", use "Jobber Length". Examples: "Mechanic's Length", "Jobber Length", "Taper Length", "Screw Machine", "Aircraft Extension", "Step Drill".
+- type: same as product_name — the tool type/style (e.g. "Mechanic's Length", "Jobber Length")
+- size: fractional size (e.g. "1/16", "3/8") — from table
+- decimal: decimal equivalent if shown — from table
+- flute_length: from table if present
+- overall_length: from table if present
+- material: from description block. Look for M-7, M-2, M-42, HSS, Carbide, Cobalt, Molybdenum (e.g. "M-7 Premium HSS")
+- finish: from description block (e.g. "Black Oxide & Gold", "Black Oxide & Silver", "Bright", "TiN", "Nitride")
+- point_angle: from description block — just the number (e.g. "135", "118", "135 Split Point")
+- cut_type: from description block (e.g. "Heavy Duty", "Extra Heavy Duty", "Standard")
+- shank: from description block if mentioned (e.g. "3-Flat", "Round", "Reduced")
+- coating: from description block if separate from finish
+
+FOR SETS (when mode includes sets):
+- size: the size range (e.g. "1/16 - 1/4")
+- product_name: include quantity and range (e.g. "13 Pc Set 1/16 to 1/4 by 64ths")
+
+DO NOT assume attributes — only extract what is explicitly stated in the text.
+Return ONLY valid JSON array. Empty array [] if nothing found.
+
+Output format:
+[{"part_number":"BBML74201","product_name":"Blitz Bits Mechanic Length","size":"1/16","decimal":"0.0625","flute_length":"7/8","overall_length":"1-7/8","material":"M-7 Premium HSS","finish":"Black Oxide Gold","point_angle":"135 Split Point","cut_type":"Heavy Duty","shank":"3-Flat"},...]`;
   const raw=await callClaude(system,`Extract products (${mode}):\n\n${text}`,4000);
   try{ return JSON.parse(raw); }
   catch(e){
@@ -951,11 +1162,51 @@ async function runBulk(){
     document.getElementById('prog-count').textContent=`${done} done · ${errors} errors`;
     document.getElementById('progFill').style.width=((i/total)*100).toFixed(1)+'%';
     try {
-      const sizeHint = bulkRows[i]._size||extractSizeFromPartNum(getPartNum(bulkRows[i]));
-      const msg=`Part Number: ${getPartNum(bulkRows[i])||'n/a'}\nProduct: ${sizeHint?`[Size: ${sizeHint}] `:''}${getName(bulkRows[i])}`;
-      const raw=await callClaude(system, msg, 800);
-      bulkResults[i]={status:'done',result:JSON.parse(raw)};
-      done++;
+      const row = bulkRows[i];
+      // If row was pre-extracted from PDF (has description block attributes),
+      // build the result directly without another API call
+      if(row._pre_extracted && (row._material || row._finish || row._point_angle)){
+        const preAttrs = {};
+        currentAttrs.forEach(attr => {
+          const key = '_' + attr.toLowerCase().replace(/[\s\-\/]+/g,'_');
+          const altKey = '_' + attr.toLowerCase().replace(/[\s\-\/]+/g,'');
+          // Map common attribute names to our _field names
+          const attrMap = {
+            'size': row._size, 'decimal': row._decimal,
+            'type': row._type || row.product_name,
+            'flute length': row._flute_length, 'flute_length': row._flute_length,
+            'overall length': row._overall_length, 'overall_length': row._overall_length,
+            'material': row._material, 'finish': row._finish,
+            'point angle': row._point_angle, 'point_angle': row._point_angle,
+            'cut type': row._cut_type, 'cut_type': row._cut_type,
+            'shank': row._shank, 'coating': row._coating,
+            'qty': row._qty, 'quantity': row._qty
+          };
+          const attrLower = attr.toLowerCase();
+          preAttrs[attr] = attrMap[attrLower] || row[key] || row[altKey] || null;
+        });
+        bulkResults[i]={status:'done',result:{
+          category: currentCat||'Drill Bits',
+          confidence: 'high',
+          reasoning: 'Extracted directly from PDF catalog page description and table.',
+          attributes: preAttrs
+        }};
+        done++;
+      } else {
+        // Standard API classification for CSV/Excel rows or rows without pre-extracted data
+        const sizeHint = row._size||extractSizeFromPartNum(getPartNum(row));
+        const extras = [
+          row._material ? `Material: ${row._material}` : '',
+          row._finish ? `Finish: ${row._finish}` : '',
+          row._point_angle ? `Point Angle: ${row._point_angle}` : '',
+          row._cut_type ? `Cut Type: ${row._cut_type}` : '',
+          row._shank ? `Shank: ${row._shank}` : '',
+        ].filter(Boolean).join(', ');
+        const msg=`Part Number: ${getPartNum(row)||'n/a'}\nProduct: ${sizeHint?`[Size: ${sizeHint}] `:''}${getName(row)}${extras?' | '+extras:''}`;
+        const raw=await callClaude(system, msg, 800);
+        bulkResults[i]={status:'done',result:JSON.parse(raw)};
+        done++;
+      }
     } catch(e){
       bulkResults[i]={status:'error',result:null,error:e.message};
       errors++;
@@ -1008,6 +1259,7 @@ function resetBulk(){
   document.getElementById('page-range-box').style.display='none';
   document.getElementById('fileInput').value='';
   pdfDoc=null;
+  pageQueue=[];
   document.getElementById('bulkBody').innerHTML='';
   document.getElementById('progFill').style.width='0%';
   document.getElementById('prog-label').textContent='Ready';
