@@ -758,15 +758,25 @@ let pageQueue = [];  // [{from, to, status:'pending'|'done'|'running'|'error'}]
 function onPageRangeSelect(){
   const sel = document.getElementById('page-range-select');
   if(!sel.value) return;
-  const [from, to] = sel.value.split(',');
+  const parts = sel.value.split(',');
+  const from = parts[0] ? parts[0].trim() : '1';
+  const to   = parts[1] ? parts[1].trim() : from;
   document.getElementById('page-from').value = from;
-  document.getElementById('page-to').value = to;
+  document.getElementById('page-to').value   = to;
 }
 
 function addToQueue(runNow){
-  const from = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
-  const to   = Math.min(pdfDoc ? pdfDoc.numPages : 9999, parseInt(document.getElementById('page-to').value)||1);
-  if(from > to){ alert('From page must be <= To page.'); return; }
+  const fromVal = document.getElementById('page-from').value;
+  const toVal   = document.getElementById('page-to').value;
+  const from = Math.max(1, parseInt(fromVal)||1);
+  const maxPage = pdfDoc ? pdfDoc.numPages : 9999;
+  // If To is empty or 0, default to same as From (single page)
+  const to = toVal ? Math.min(maxPage, parseInt(toVal)||from) : from;
+  if(from > to){
+    // Auto-fix: set To = From
+    document.getElementById('page-to').value = from;
+    return addToQueue(runNow);
+  }
 
   if(runNow){
     // Run immediately without adding to queue
@@ -860,14 +870,17 @@ async function extractPageRange(fromPage, toPage){
   if(!pdfDoc){ alert('No PDF loaded.'); return; }
   if(!apiKey) apiKey=localStorage.getItem(API_KEY)||'';
   if(!apiKey){ alert('No API key — paste key in header and click Save key.'); return; }
-  // If called without args (legacy), read from inputs
+  // If called without args, read from inputs
   if(fromPage===undefined){
-    fromPage = Math.max(1, parseInt(document.getElementById('page-from').value)||1);
-    toPage   = Math.min(pdfDoc.numPages, parseInt(document.getElementById('page-to').value)||1);
+    const fv = document.getElementById('page-from').value;
+    const tv = document.getElementById('page-to').value;
+    fromPage = Math.max(1, parseInt(fv)||1);
+    toPage   = tv ? Math.min(pdfDoc.numPages, parseInt(tv)||fromPage) : fromPage;
   }
-  fromPage = Math.max(1, fromPage);
-  toPage   = Math.min(pdfDoc.numPages, toPage);
-  if(fromPage>toPage){ throw new Error('From page must be <= To page'); }
+  fromPage = Math.max(1, parseInt(fromPage)||1);
+  toPage   = Math.min(pdfDoc.numPages, parseInt(toPage)||fromPage);
+  // Auto-fix if inverted
+  if(fromPage > toPage) toPage = fromPage;
 
   document.getElementById('pdf-status-box').style.display='block';
   ['pstep-extract','pstep-ocr','pstep-tax','pstep-parse','pstep-load'].forEach(id=>setPdfStep(id,''));
