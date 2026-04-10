@@ -105,6 +105,7 @@ tr:hover td{background:var(--surface2)}
 .kb-meta{font-size:10px;color:var(--muted);font-family:var(--mono)}
 .hint-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:1rem;line-height:1.7}
 .hint-box strong{color:var(--text2,var(--text))}
+.kb-rule-row{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;font-size:11px;font-family:var(--mono);padding:4px 8px;background:rgba(108,99,255,.06);border-radius:4px;border-left:2px solid var(--accent)}
 .section-title{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
 .toggle-row{display:flex;gap:12px;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
 .toggle-row label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-family:var(--mono)}
@@ -360,6 +361,16 @@ function renderKB(){
     const entry = kb[cat];
     const pills = entry.attrs.map(a=>`<span class="kb-pill">${a}</span>`).join('');
     const date = entry.saved ? new Date(entry.saved).toLocaleDateString() : '';
+    const rules = entry.rules || [];
+    const rulesHtml = rules.length ? `
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Correction Rules</div>
+        ${rules.map((r,i)=>`<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;font-size:11px;font-family:var(--mono)">
+          <span style="color:var(--accent2)">→</span>
+          <span style="color:var(--text);flex:1;line-height:1.5">${r}</span>
+          <span onclick="removeKBRule('${cat}',${i})" style="cursor:pointer;color:var(--muted);font-size:13px;flex-shrink:0">×</span>
+        </div>`).join('')}
+      </div>` : '';
     return `<div class="kb-card">
       <div class="kb-card-header">
         <span class="kb-cat-name">${cat}</span>
@@ -371,6 +382,11 @@ function renderKB(){
       <div class="kb-card-body">
         <div class="kb-attr-list">${pills}</div>
         <div class="kb-meta">${entry.attrs.length} attributes · saved ${date}</div>
+        ${rulesHtml}
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <input type="text" id="rule-input-${cat.replace(/\s+/g,'_')}" placeholder="Add correction rule e.g. Size = diameter only, never a length" style="flex:1;font-size:11px;padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:var(--mono)" onkeydown="if(event.key==='Enter')addKBRule('${cat}')"/>
+          <button class="bulk-btn" style="padding:4px 10px;font-size:11px;flex-shrink:0" onclick="addKBRule('${cat}')">+ Rule</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -404,6 +420,29 @@ function deleteKBEntry(cat){
   saveKB(kb);
   renderKB();
   populateCatDatalist();
+}
+
+function addKBRule(cat){
+  const inputId = 'rule-input-' + cat.replace(/\s+/g,'_');
+  const inp = document.getElementById(inputId);
+  if(!inp) return;
+  const rule = inp.value.trim();
+  if(!rule) return;
+  const kb = loadKB();
+  if(!kb[cat]) return;
+  if(!kb[cat].rules) kb[cat].rules = [];
+  kb[cat].rules.push(rule);
+  saveKB(kb);
+  inp.value = '';
+  renderKB();
+}
+
+function removeKBRule(cat, idx){
+  const kb = loadKB();
+  if(!kb[cat] || !kb[cat].rules) return;
+  kb[cat].rules.splice(idx, 1);
+  saveKB(kb);
+  renderKB();
 }
 
 function editKBEntry(cat){
@@ -451,7 +490,8 @@ Rules:
 - Return 6-14 attributes that buyers would use to filter/search this product type
 - Attributes should be specific and useful — think like a buyer filtering a catalog
 - ALWAYS include "Size" — it is the most critical filter for almost every industrial product
-- For drill bits include: Size, Decimal, Type, Material, Point Angle, Finish, Cut Type, Shank, Flute Length, Overall Length, Coating
+- For drill bits include: Size, Decimal, Type, Material, Point Angle, Finish, Cut Type, Shank, Flute Length, Overall Length, Coating, Country of Origin
+  NOTE: Size = diameter only (token 1 in table). Flute Length (token 3) and Overall Length (token 4) are separate — never put them in Size.
 - For taps include: Size, TPI, Material, Chamfer, Cut Type, Finish, Thread Form
 - For safety equipment include: Size, Material, Rating/Standard, Color, Application
 - For general tools include: Size, Material, Finish, Drive Type, Application
@@ -512,15 +552,28 @@ function approveAndProceed(){
 
 // ── Classification system prompt (dynamic) ────────────────────────────────────
 function buildSystemPrompt(cat, attrs){
+  // Load correction rules from knowledge base for this category
+  const kb = loadKB();
+  let rules = [];
+  if(cat){
+    const key = Object.keys(kb).find(k=>k.toLowerCase()===cat.trim().toLowerCase());
+    if(key && kb[key].rules && kb[key].rules.length) rules = kb[key].rules;
+  }
+  const rulesSection = rules.length ?
+    `\n\nCORRECTION RULES FOR ${(cat||'').toUpperCase()} — THESE OVERRIDE EVERYTHING ELSE:\n${rules.map((r,i)=>`${i+1}. ${r}`).join('\n')}` : '';
+
   return `You are a product attribute extraction engine for e-commerce catalog management.
 
 Category: ${cat||'auto-detect'}
-Required attributes to extract: ${attrs.join(', ')}
+Required attributes to extract: ${attrs.join(', ')}${rulesSection}
 
 Rules:
 - Extract ONLY attributes that are clearly determinable from the input. Return null for unknown.
 - The input may already contain pre-extracted fields like [Size: X], material, finish, point_angle — use them directly.
-- Size: extract the measurement with unit exactly. If size is in part number or in a [Size: X] hint, use it.
+- Size: extract the DIAMETER only — not flute length, not overall length. Size is the drill diameter (e.g. "1/16", "3/8 inch", "M6"). If input has [Size: X] hint, use that. If part number contains a fraction like "3/8", that is likely the diameter.
+- Flute Length: extract separately from Size — it is the length of the cutting flutes, always longer than the diameter.
+- Overall Length: extract separately — total length of the drill bit, always the longest measurement.
+- Never put a length value into the Size field. If unsure whether a fraction is a size or length, use context: diameters are small (1/16 to 1 inch range), lengths are larger (7/8 inch to 6+ inches).
 - Type: the drill/tool type — Mechanic's Length, Jobber Length, Taper Length, Screw Machine, etc. This comes from the product_name field. NEVER put the brand name here.
 - Material: look for HSS, M-2, M-7, M-42, Carbide, Cobalt, Carbon Steel, Molybdenum mentions.
 - Finish: look for Black Oxide, Gold, Silver, Bright, TiN, Nitride, Bronze mentions.
@@ -954,6 +1007,7 @@ async function extractPageRange(fromPage, toPage){
       _cut_type: p.cut_type||'',
       _shank: p.shank||'',
       _coating: p.coating||'',
+      _country: p.country_of_origin||p.country||'',
       _qty: p.qty||'',
       _pre_extracted: true
     })).filter(r=>r.product_name);
@@ -1039,52 +1093,116 @@ async function parsePdfChunk(text){
     sets:`Extract ONLY sets/kits — products with a quantity and size range. Do NOT extract single individual items.`,
     both:`Extract ALL products — both individual items and sets/kits.`
   };
-  const system=`You are a product data extraction engine for an industrial tools catalog.
-${modeInstr[mode]}
-
-CRITICAL UNDERSTANDING — HOW CATALOG PAGES WORK:
-Each page typically has TWO sections you must read TOGETHER:
-1. A DESCRIPTION BLOCK — found above OR below the table (varies by page). Contains shared attributes that apply to ALL products on that page: material, finish, point angle, cut type, coating, shank type, series name, etc.
-2. A TABLE — contains individual row data: size, decimal equivalent, flute length, overall length, stock number.
-
-YOUR JOB: Extract the description block attributes FIRST, then apply them to EVERY row in the table. Each product should have BOTH the table data AND the description attributes combined.
-
-Example — if the description says "Premium M-7 HSS, 135° Split Point, Black Oxide & Gold Finish, Heavy Duty" and the table row says "1/16 | .0625 | 7/8 | 1-7/8 | BBML74201", then the product is:
-{"part_number":"BBML74201","product_name":"Blitz Bits Mechanic Length Drill Bit","size":"1/16","decimal":"0.0625","flute_length":"7/8","overall_length":"1-7/8","material":"M-7 Premium HSS","finish":"Black Oxide & Gold","point_angle":"135 Split Point","cut_type":"Heavy Duty","shank":"3-Flat"}
-
-EXTRACTION RULES:
-- part_number: stock/item number (letters+numbers pattern like BBML74201, BBN74501, BB74101)
-- product_name: the TOOL TYPE only — strip the brand name completely. Use only the type/style descriptor. If header says "Blitz Bits® - Mechanic's Length", use "Mechanic's Length". If "Blitz Nitride® - Jobber Drills", use "Jobber Length". Examples: "Mechanic's Length", "Jobber Length", "Taper Length", "Screw Machine", "Aircraft Extension", "Step Drill".
-- type: same as product_name — the tool type/style (e.g. "Mechanic's Length", "Jobber Length")
-- size: fractional size (e.g. "1/16", "3/8") — from table
-- decimal: decimal equivalent if shown — from table
-- flute_length: from table if present
-- overall_length: from table if present
-- material: from description block. Look for M-7, M-2, M-42, HSS, Carbide, Cobalt, Molybdenum (e.g. "M-7 Premium HSS")
-- finish: from description block (e.g. "Black Oxide & Gold", "Black Oxide & Silver", "Bright", "TiN", "Nitride")
-- point_angle: from description block — just the number (e.g. "135", "118", "135 Split Point")
-- cut_type: from description block (e.g. "Heavy Duty", "Extra Heavy Duty", "Standard")
-- shank: from description block if mentioned (e.g. "3-Flat", "Round", "Reduced")
-- coating: from description block if separate from finish
-
-FOR SETS (when mode includes sets):
-- size: the size range (e.g. "1/16 - 1/4")
-- product_name: include quantity and range (e.g. "13 Pc Set 1/16 to 1/4 by 64ths")
-
-DO NOT assume attributes — only extract what is explicitly stated in the text.
-Return ONLY valid JSON array. Empty array [] if nothing found.
-
-Output format:
-[{"part_number":"BBML74201","product_name":"Blitz Bits Mechanic Length","size":"1/16","decimal":"0.0625","flute_length":"7/8","overall_length":"1-7/8","material":"M-7 Premium HSS","finish":"Black Oxide Gold","point_angle":"135 Split Point","cut_type":"Heavy Duty","shank":"3-Flat"},...]`;
-  const raw=await callClaude(system,`Extract products (${mode}):\n\n${text}`,4000);
-  try{ return JSON.parse(raw); }
-  catch(e){
-    const lastBracket=raw.lastIndexOf('},');
-    if(lastBracket>0){ try{ return JSON.parse(raw.substring(0,lastBracket+1)+']'); }catch(e2){} }
-    const lastClose=raw.lastIndexOf('}');
-    if(lastClose>0){ try{ const a=raw.substring(0,lastClose+1); return JSON.parse(a.startsWith('[')?a+']':'['+a+']'); }catch(e3){} }
-    throw new Error('Could not parse products from this chunk.');
+  // Load KB rules for current category
+  const kbForParse = loadKB();
+  let parseRules = [];
+  if(currentCat){
+    const kbKey = Object.keys(kbForParse).find(k=>k.toLowerCase()===currentCat.trim().toLowerCase());
+    if(kbKey && kbForParse[kbKey].rules && kbForParse[kbKey].rules.length) parseRules = kbForParse[kbKey].rules;
   }
+  const parseRulesSection = parseRules.length ?
+    `\n\nCORRECTION RULES — THESE OVERRIDE EVERYTHING ELSE:\n${parseRules.map((r,i)=>`${i+1}. ${r}`).join('\n')}` : '';
+
+  const system=`You are a product data extraction engine for an industrial product catalog.
+${modeInstr[mode]}${parseRulesSection}
+
+CRITICAL — HOW TO READ ANY CATALOG PAGE:
+
+STEP 1 — READ THE COLUMN HEADERS FIRST.
+Before extracting any data, find the table header row. It tells you exactly what each column means.
+Examples of header rows:
+- "SIZE | DECIMAL EQUIV | FLUTE LENGTH | OVERALL LENGTH | STOCK #" → drill bits layout
+- "ITEM | DESCRIPTION | UPC | BODY SIZE | EXPOSED LENGTH | WEIGHT | PKG TYPE | COO" → pry bars layout
+- Headers vary by catalog. Always read them first.
+
+STEP 2 — MAP COLUMNS TO FIELDS.
+Whatever the header says, extract accordingly:
+- The column labeled "SIZE" in drill bits = diameter. The column labeled "BODY SIZE" in pry bars = rod diameter.
+- "EXPOSED LENGTH" or "LENGTH" = a length measurement, NOT a size/diameter.
+- "COO" or "Country" = Country of Origin.
+- "ITEM" or "ITEM #" or "PART #" = part number.
+- "DESCRIPTION" = product name/description.
+- Length values in the DESCRIPTION (like 8", 12", 36") = the overall product length.
+
+STEP 3 — EXTRACT FROM DESCRIPTION BLOCK (above or below table).
+Look for shared attributes that apply to ALL rows: material, finish, features, country of origin.
+"Made in USA" or "Made in the USA" → country_of_origin = "USA"
+"Black oxide finish" → finish = "Black Oxide"
+"Alloy steel" → material = "Alloy Steel"
+
+FIELDS TO EXTRACT (use what applies, leave others null):
+- part_number: item/part number from the table
+- product_name: product description — strip brand name, keep type + key specs. Example: "8 inch Straight Pry Bar" not "Dominator Pro 8-S Straight Pry Bar"
+- type: the product type (e.g. "Straight Pry Bar", "Curved Pry Bar", "Jobber Drill Bit", "Mechanic's Length Drill Bit")
+- size: diameter or body size — ONLY if the column is explicitly labeled SIZE or BODY SIZE. Never put a length here.
+- length: overall length from description (e.g. "8 inch", "36 inch") OR from a LENGTH column
+- exposed_length: exposed shaft/blade length if shown in table
+- body_size: rod/bar diameter if labeled BODY SIZE
+- decimal: decimal equivalent if shown
+- flute_length: flute length if shown (drill bits)
+- overall_length: overall length if shown (drill bits)
+- material: from description block (e.g. "Alloy Steel", "M-7 HSS", "Carbide")
+- finish: from description block (e.g. "Black Oxide", "Bright", "Gold")
+- point_angle: for drill bits only
+- cut_type: e.g. "Heavy Duty", "Standard"
+- shank: shank type if mentioned
+- country_of_origin: from COO column OR "Made in USA/China" text anywhere on page. Extract just the country name (e.g. "USA", "China", "Germany")
+- weight: weight if shown
+- pkg_type: packaging type (e.g. "Bulk", "Carded")
+- upc: UPC code if present
+
+FOR SETS: include qty and size_range fields.
+
+CRITICAL RULES:
+- NEVER put a length value into the size field
+- ALWAYS extract country_of_origin — check the COO column AND the description text
+- Read column headers first — do not assume column order
+- Strip brand names (Dominator®, Blitz Bits®, etc.) from product_name
+- Return ONLY valid JSON array. If no products found return [].
+- NEVER use single quotes in JSON. Escape inch symbols as \" inside strings.
+
+Output: [{"part_number":"14100","product_name":"8 inch Straight Pry Bar","type":"Straight Pry Bar","length":"8 inch","body_size":"1/4","exposed_length":"3.25","material":"Alloy Steel","finish":"Black Oxide","country_of_origin":"USA","weight":"0.37","pkg_type":"Bulk"},...]`;
+  const raw=await callClaude(system,`Extract products (${mode}):\n\n${text}`,4000);
+  // Clean and parse with multiple fallback strategies
+  const cleanJSON = (str) => {
+    // Fix single-quoted strings (e.g. '8"' -> "8\"")
+    let s = str;
+    // Replace single-quoted values: 'value' -> "value"
+    // But only when they appear as JSON values (after : or [)
+    s = s.replace(/:\s*'([^']*)'/g, (m,v) => ': "' + v.replace(/"/g,'\\"') + '"');
+    s = s.replace(/\[\s*'([^']*)'/g, (m,v) => '["' + v.replace(/"/g,'\\"') + '"');
+    // Fix unescaped inch symbols inside double-quoted strings
+    // e.g. "8"" -> "8\""
+    s = s.replace(/"([^"]*)""/g, (m,v) => '"' + v + '\""');
+    // Fix trailing commas before ] or }
+    s = s.replace(/,(\s*[\]}])/g, '$1');
+    return s;
+  };
+  const tryParse = (str) => {
+    // Try raw first
+    try{ return JSON.parse(str); } catch(e){}
+    // Try cleaned
+    try{ return JSON.parse(cleanJSON(str)); } catch(e){ return null; }
+  };
+  // Strategy 1: direct parse
+  let parsed = tryParse(raw);
+  if(parsed) return Array.isArray(parsed) ? parsed : [];
+  // Strategy 2: find JSON array in response
+  const arrMatch = raw.match(/\[.*\]/s);
+  if(arrMatch){ parsed = tryParse(arrMatch[0]); if(parsed) return parsed; }
+  // Strategy 3: recover truncated array
+  const lastComma = raw.lastIndexOf('},');
+  if(lastComma>0){ parsed = tryParse(raw.substring(0,lastComma+1)+']'); if(parsed) return parsed; }
+  // Strategy 4: single object
+  const lastClose = raw.lastIndexOf('}');
+  if(lastClose>0){
+    const a = raw.substring(0,lastClose+1);
+    parsed = tryParse(a.startsWith('[')?a+']':'['+a+']');
+    if(parsed) return parsed;
+  }
+  // Strategy 5: return empty array gracefully — never crash the queue
+  console.warn('No products found in chunk, returning empty array. Raw:', raw.substring(0,200));
+  return [];
 }
 
 async function processNextChunk(){
@@ -1185,8 +1303,11 @@ async function runBulk(){
           const altKey = '_' + attr.toLowerCase().replace(/[\s\-\/]+/g,'');
           // Map common attribute names to our _field names
           const attrMap = {
-            'size': row._size, 'decimal': row._decimal,
+            'size': row._size, 'size (diameter)': row._size,
+            'decimal': row._decimal,
             'type': row._type || row.product_name,
+            'flute length': row._flute_length,
+            'overall length': row._overall_length,
             'flute length': row._flute_length, 'flute_length': row._flute_length,
             'overall length': row._overall_length, 'overall_length': row._overall_length,
             'material': row._material, 'finish': row._finish,
