@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>TaxoAI — Product Classifier</title>
+<title>DrillTaxo — Drill Bit Classifier</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
@@ -119,7 +119,7 @@ input[type=file]{display:none}
 <body>
 
 <div class="header">
-  <div class="logo">Taxo<span>AI</span></div>
+  <div class="logo">Drill<span>Taxo</span></div>
   <div class="api-area">
     <input type="password" id="apiKeyInput" placeholder="sk-ant-..."/>
     <button class="api-save" onclick="saveKey()">Save key</button>
@@ -143,7 +143,7 @@ input[type=file]{display:none}
       </div>
       <div class="field">
         <label>Category — type it (AI adapts)</label>
-        <input type="text" id="s-category" placeholder="e.g. Drill Bits, Safety Glasses, Wrenches" list="kb-cats-list"/>
+        <input type="text" id="s-category" value="Drill Bits" readonly style="background:var(--bg);color:var(--accent2);cursor:default" list="kb-cats-list"/>
         <datalist id="kb-cats-list"></datalist>
       </div>
     </div>
@@ -170,7 +170,7 @@ input[type=file]{display:none}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">
       <div class="field">
         <label>Category for this PDF / file</label>
-        <input type="text" id="b-category" placeholder="e.g. Drill Bits, Safety Glasses" list="kb-cats-list2"/>
+        <input type="text" id="b-category" value="Drill Bits" readonly style="background:var(--bg);color:var(--accent2);cursor:default" list="kb-cats-list2"/>
         <datalist id="kb-cats-list2"></datalist>
       </div>
       <div class="field">
