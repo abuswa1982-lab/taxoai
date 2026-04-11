@@ -1145,7 +1145,7 @@ FIELDS TO EXTRACT (use what applies, leave others null):
 - finish: from description block (e.g. "Black Oxide", "Bright", "Gold")
 - point_angle: for drill bits only
 - cut_type: e.g. "Heavy Duty", "Standard"
-- shank: shank type if mentioned
+- shank: CONDITIONAL based on size. '3-Flat Shank Design (On 3/16 and Larger)' means: if size >= 3/16 inch then shank='3-Flat', if size < 3/16 (1/16 through 11/64) then shank=null. Never apply 3-Flat to small sizes
 - country_of_origin: from COO column OR "Made in USA/China" text anywhere on page. Extract just the country name (e.g. "USA", "China", "Germany")
 - weight: weight if shown
 - pkg_type: packaging type (e.g. "Bulk", "Carded")
