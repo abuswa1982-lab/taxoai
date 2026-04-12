@@ -277,7 +277,8 @@ input[type=file]{display:none}
       <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
       <div class="bulk-controls">
         <button class="bulk-btn primary" id="runBulkBtn" onclick="runBulk()">Run classification</button>
-        <button class="bulk-btn success" id="exportBtn" onclick="exportResults()" style="display:none">Export results</button>
+        <button class="bulk-btn success" id="exportBtn" onclick="exportResults()" style="display:none">Export Excel</button>
+        <button class="bulk-btn" id="htmlBtn" onclick="generateHTML()" style="display:none;border-color:var(--accent2);color:var(--accent2)">Generate HTML Tables</button>
         <button class="bulk-btn" onclick="resetBulk()">Clear</button>
         <span id="bulk-summary" style="font-size:11px;font-family:var(--mono);color:var(--muted);margin-left:auto"></span>
       </div>
@@ -1353,17 +1354,18 @@ async function runBulk(){
   document.getElementById('prog-count').textContent=`${done} done · ${errors} errors`;
   document.getElementById('bulk-summary').textContent=`${done}/${total} classified · ${errors} errors`;
   document.getElementById('exportBtn').style.display='';
+  document.getElementById('htmlBtn').style.display='';
   document.getElementById('runBulkBtn').disabled=false;
   running=false;
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
 function exportResults(){
-  const fixedHeaders=['part_number','product_name','category','confidence','reasoning'];
-  const headers=[...fixedHeaders,...currentAttrs];
+  const headers=['part_number','product_name','category','confidence',...currentAttrs,'reasoning','html_table'];
   const data=bulkRows.map((row,i)=>{
     const r=bulkResults[i],res=r.result,a=res?.attributes||{};
-    return[getPartNum(row),getName(row),res?.category||'',res?.confidence||'',res?.reasoning||'',...currentAttrs.map(k=>a[k]||'')];
+    const htmlTable=buildProductHTML(row,res,currentAttrs);
+    return[getPartNum(row),getName(row),res?.category||'',res?.confidence||'',...currentAttrs.map(k=>a[k]||mapPreExtracted(row,k)||''),res?.reasoning||'',htmlTable];
   });
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([headers,...data]);
@@ -1383,6 +1385,105 @@ function downloadTemplate(){
   ws['!cols']=[{wch:20},{wch:50},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws,'Import Template');
   XLSX.writeFile(wb,'taxoai_template.xlsx');
+}
+
+
+function buildProductHTML(row, result, attrs){
+  const pn = getPartNum(row);
+  const name = getName(row);
+  const a = result?.attributes || {};
+  // Use attrs in exact same order as the table columns shown on screen
+  // Add part number and product name as first rows
+  const allRows = [
+    `<tr><th style="text-align:left;padding:6px 12px;background:#f5f5f5;border:1px solid #ddd;white-space:nowrap;font-weight:600;width:160px">Part Number</th><td style="padding:6px 12px;border:1px solid #ddd">${pn||'—'}</td></tr>`,
+    `<tr><th style="text-align:left;padding:6px 12px;background:#f5f5f5;border:1px solid #ddd;white-space:nowrap;font-weight:600;width:160px">Product Name</th><td style="padding:6px 12px;border:1px solid #ddd">${name||'—'}</td></tr>`,
+    ...attrs.map(attr => {
+      const val = a[attr] || mapPreExtracted(row, attr);
+      if(!val) return '';
+      return `<tr><th style="text-align:left;padding:6px 12px;background:#f5f5f5;border:1px solid #ddd;white-space:nowrap;font-weight:600;width:160px">${attr}</th><td style="padding:6px 12px;border:1px solid #ddd">${val}</td></tr>`;
+    })
+  ].filter(Boolean).join('');
+  if(!allRows) return '';
+  return `<table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:14px;margin-bottom:24px">
+  <tbody>${allRows}</tbody>
+</table>`;
+}
+
+function mapPreExtracted(row, attr){
+  if(!row._pre_extracted) return null;
+  const a = attr.toLowerCase();
+  const map = {
+    'type':row._type,'size':row._size,'length':row._length,'decimal':row._decimal,
+    'flute length':row._flute_length,'overall length':row._overall_length,
+    'body size':row._body_size,'exposed length':row._exposed_length,
+    'material':row._material,'finish':row._finish,'point angle':row._point_angle,
+    'cut type':row._cut_type,'shank':row._shank,'coating':row._coating,
+    'country of origin':row._country,'weight':row._weight,'package type':row._pkg_type,
+    'cut level':row._cut_level,'abrasion rating':row._abrasion,'puncture rating':row._puncture,
+    'gauge':row._gauge,'touchscreen':row._touchscreen,'en388':row._en388,'en388 rating':row._en388
+  };
+  return map[a] || null;
+}
+
+function generateHTML(){
+  // Build HTML tables for all classified rows
+  const tables = bulkRows.map((row, i) => {
+    const r = bulkResults[i];
+    if(r.status !== 'done') return null;
+    return buildProductHTML(row, r.result, currentAttrs);
+  }).filter(Boolean);
+
+  if(!tables.length){ alert('No classified rows to generate HTML for.'); return; }
+
+  // Show in a new window for preview + copy
+  const fullHTML = tables.join('\n');
+  const preview = window.open('', '_blank', 'width=900,height=700');
+  preview.document.write(`<!DOCTYPE html><html><head><title>DrillTaxo HTML Tables</title>
+<style>
+  body{font-family:Arial,sans-serif;padding:30px;background:#fafafa}
+  .toolbar{position:sticky;top:0;background:#fff;border-bottom:2px solid #6c63ff;padding:12px 0;margin-bottom:20px;display:flex;gap:10px;align-items:center;z-index:100}
+  .copy-btn{background:#6c63ff;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600}
+  .copy-btn:hover{background:#7d75ff}
+  .copy-btn.excel{background:#217346}
+  .copy-btn.excel:hover{background:#1a5c38}
+  .status{font-size:12px;color:#666;margin-left:8px}
+  .count{font-size:13px;color:#6c63ff;font-weight:600}
+  pre{background:#f0f0f0;padding:15px;border-radius:6px;font-size:11px;overflow-x:auto;border:1px solid #ddd;max-height:300px;overflow-y:auto}
+  .table-block{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px}
+  .pn{font-size:11px;color:#888;font-family:monospace;margin-bottom:8px}
+</style>
+</head><body>
+<div class="toolbar">
+  <span class="count">${tables.length} HTML tables generated</span>
+  <button class="copy-btn" onclick="copyAll()">Copy All HTML</button>
+  <span class="status" id="copy-status"></span>
+</div>
+${tables.map((t,i) => `<div class="table-block"><div class="pn">Table ${i+1}</div>${t}</div>`).join('')}
+<script>
+const allHTML = ${JSON.stringify(fullHTML)};
+function copyAll(){
+  navigator.clipboard.writeText(allHTML).then(()=>{
+    document.getElementById('copy-status').textContent = '✓ Copied to clipboard!';
+    setTimeout(()=>document.getElementById('copy-status').textContent='', 2500);
+  }).catch(()=>{
+    const ta = document.createElement('textarea');
+    ta.value = allHTML; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    document.getElementById('copy-status').textContent = '✓ Copied!';
+    setTimeout(()=>document.getElementById('copy-status').textContent='', 2500);
+  });
+}
+<\/script>
+</body></html>`);
+  preview.document.close();
+
+  // Also add HTML column to Excel export
+  window._htmlTables = {};
+  bulkRows.forEach((row, i) => {
+    const r = bulkResults[i];
+    if(r.status === 'done') window._htmlTables[i] = buildProductHTML(row, r.result, currentAttrs);
+  });
 }
 
 function resetBulk(){
